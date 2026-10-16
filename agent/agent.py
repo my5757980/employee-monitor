@@ -33,6 +33,16 @@ import urllib.request
 
 import requests
 
+# Trust the operating system's certificate store (the same roots the browser
+# uses) so the agent works behind corporate TLS-inspection proxies / firewalls
+# and with custom company root CAs - otherwise HTTPS fails with a cert error
+# even though the browser opens the site fine.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 try:
     import mss
     from PIL import Image
