@@ -329,10 +329,18 @@ $('#polSave').addEventListener('click', async () => {
     body: JSON.stringify({ device_id: Number(id), blocked_apps: $('#polApps').value, blocked_sites: $('#polSites').value }) });
   $('#polMsg').textContent = 'Saved'; setTimeout(() => $('#polMsg').textContent = '', 2000);
 });
-// While "Live view" is on, refresh the open screenshot quickly.
+// While "Live view" is on, refresh the open screenshot every second (the agent
+// sends ~1 frame/sec in live mode), and keep the live session renewed so it
+// doesn't drop while the admin is watching.
 setInterval(async () => {
   const id = $('#detail').getAttribute('data-id');
   if ($('#detail').classList.contains('hidden') || Date.now() > liveUntil || id !== liveId) return;
+  // renew the live window before it expires so watching stays continuous
+  if (liveUntil - Date.now() < 45000) {
+    api('/api/admin/command', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ device_id: Number(id), type:'live', payload:'120' }) }).catch(()=>{});
+    liveUntil = Date.now() + 120000;
+  }
   try {
     const { device: d } = await api('/api/admin/device?id=' + id);
     if (d.screenshots && d.screenshots.length) {
@@ -340,7 +348,7 @@ setInterval(async () => {
       $('#dShotTs').textContent = 'Live: ' + d.screenshots[0].ts;
     }
   } catch (e) {}
-}, 3000);
+}, 1000);
 
 const CONFIRM = { logoff:'Log this user off?', restart:'Restart this computer?', shutdown:'Shut this computer down?' };
 async function sendCommand(id, type) {
@@ -402,7 +410,7 @@ async function start() {
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   const me = await api('/api/admin/me'); $('#who').textContent = me.name;
   await loadDevices();
-  clearInterval(timer); timer = setInterval(loadDevices, 15000);
+  clearInterval(timer); timer = setInterval(loadDevices, 8000);
 }
 (async () => { try { await api('/api/admin/me'); start(); } catch (e) { $('#login').classList.remove('hidden'); } })();
 </script>
