@@ -25,7 +25,15 @@ function connect_server(): PDO
 switch ($cmd) {
     case 'migrate':
         $sql = file_get_contents(__DIR__ . '/../db/schema.sql');
-        connect_server()->exec($sql);
+        // Create the database if we have the privilege (local root). On a hosted
+        // account the database already exists and the user can't CREATE DATABASE,
+        // so this is optional - ignore the failure.
+        if (preg_match('/CREATE DATABASE[^;]+;/i', $sql, $m)) {
+            try { connect_server()->exec($m[0]); } catch (Throwable $e) { /* already exists */ }
+        }
+        // Create the tables inside the database itself.
+        $ddl = preg_replace('/CREATE DATABASE[^;]+;|USE\s+[^;]+;/i', '', $sql);
+        db()->exec($ddl);
         echo "Database and tables ready.\n";
         break;
 
