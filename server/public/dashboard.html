@@ -61,7 +61,11 @@
         <h2 id="dName" class="font-bold text-lg"></h2>
         <p id="dSub" class="text-xs text-slate-500"></p>
       </div>
-      <button id="dClose" class="ml-auto text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="dEdit" class="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1">Rename / group</button>
+        <button id="dRemove" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-2 py-1">Remove</button>
+        <button id="dClose" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
     </div>
     <div class="grid md:grid-cols-2 gap-4 p-4">
       <div>
@@ -176,13 +180,14 @@ function tile(x) {
   const shot = x.last_shot ? `/api/admin/shot?p=${encodeURIComponent(x.last_shot)}` : '';
   const dot  = x.online ? 'bg-emerald-500' : 'bg-slate-300';
   const name = esc(x.employee_name || x.hostname || ('PC #'+x.id));
+  const grp  = x.group_name ? `<span class="text-[10px] bg-slate-100 text-slate-500 rounded px-1 ml-1">${esc(x.group_name)}</span>` : '';
   const act  = x.is_idle ? 'Idle' : esc(x.active_app || '—');
   return `<div data-dev="${x.id}" class="bg-white rounded-xl shadow-sm hover:shadow-md cursor-pointer overflow-hidden border">
     ${shot ? `<img src="${shot}" class="tile-shot w-full">` : `<div class="tile-shot w-full grid place-items-center text-slate-500 text-sm">No screenshot yet</div>`}
     <div class="p-3">
       <div class="flex items-center gap-2">
         <span class="w-2.5 h-2.5 rounded-full ${dot}"></span>
-        <span class="font-semibold text-sm truncate">${name}</span>
+        <span class="font-semibold text-sm truncate">${name}</span>${grp}
         <span class="ml-auto text-xs text-slate-400">${fmtAgo(x.ago)}</span>
       </div>
       <p class="text-xs text-slate-500 mt-1 truncate">${act}</p>
@@ -250,6 +255,22 @@ $('#playBtn').addEventListener('click', () => {
 });
 
 $('#dClose').addEventListener('click', () => { stopPlay(); $('#detail').classList.add('hidden'); });
+$('#dEdit').addEventListener('click', async () => {
+  const id = $('#detail').getAttribute('data-id');
+  const name = prompt('Name for this computer / employee:', $('#dName').textContent);
+  if (name === null) return;
+  const group = prompt('Group (optional, e.g. Sales):', '');
+  await api('/api/admin/device-update', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: Number(id), employee_name: name, group_name: group || '' }) });
+  $('#dName').textContent = name || $('#dName').textContent;
+  loadDevices();
+});
+$('#dRemove').addEventListener('click', async () => {
+  const id = $('#detail').getAttribute('data-id');
+  if (!confirm('Remove this computer from the dashboard? (Its data is kept; re-installing the agent adds it back.)')) return;
+  await api('/api/admin/device-remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: Number(id) }) });
+  $('#detail').classList.add('hidden'); loadDevices();
+});
 document.querySelectorAll('.dtab').forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
 function showTab(t) {
   document.querySelectorAll('.dtab').forEach(b => {
@@ -334,17 +355,22 @@ async function loadCommands(id) {
       <span class="text-xs ${color}">${c.status}</span></div>`;
   }).join('') || '<p class="text-slate-400 py-2">No actions yet.</p>';
 }
-async function loadReport(id) {
-  const r = await api('/api/admin/report?id=' + id);
+async function loadReport(id, day) {
+  const r = await api('/api/admin/report?id=' + id + (day ? '&day=' + day : ''));
   const mins = (n) => Math.round(n * r.sample_seconds / 60);
   const row = (label, n, extra='') => `<div class="flex items-center gap-2 py-1 border-b">
       <span class="flex-1 truncate">${esc(label)}</span><span class="text-slate-400 text-xs">${extra}</span>
       <span class="font-semibold w-16 text-right">${mins(n)} min</span></div>`;
   $('#dRep').innerHTML =
+    `<div class="flex items-center gap-2 mb-3">
+       <input id="repDay" type="date" value="${r.day}" class="border rounded-lg px-2 py-1 text-sm">
+       <a href="/api/admin/report-csv?id=${id}&day=${r.day}" class="text-sm bg-slate-200 hover:bg-slate-300 rounded-lg px-3 py-1">Download CSV</a>
+     </div>` +
     `<h4 class="font-semibold mt-1 mb-1">Applications — ${r.day}</h4>` +
     (r.apps.map(a => row(a.active_app, a.samples, a.idle>0?('idle '+mins(a.idle)+'m'):'')).join('') || '<p class="text-slate-400 py-2">No data.</p>') +
     `<h4 class="font-semibold mt-4 mb-1">Websites</h4>` +
     (r.sites.map(s => row(s.website, s.samples)).join('') || '<p class="text-slate-400 py-2">No data.</p>');
+  $('#repDay').addEventListener('change', (e) => loadReport(id, e.target.value));
 }
 
 // ---- add computer ----

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS devices (
   device_token  CHAR(64) NOT NULL UNIQUE,     -- the agent authenticates with this
   hostname      VARCHAR(190) NOT NULL DEFAULT '',
   employee_name VARCHAR(190) NOT NULL DEFAULT '',
+  group_name    VARCHAR(190) NOT NULL DEFAULT '',
   os            VARCHAR(190) NOT NULL DEFAULT '',
   agent_version VARCHAR(32)  NOT NULL DEFAULT '',
   consent_ack   TINYINT NOT NULL DEFAULT 0,   -- the on-screen "this PC is monitored" notice was shown

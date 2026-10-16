@@ -199,7 +199,7 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/devices' && $method === 'GET') {
         require_admin();
         $rows = q(
-            "SELECT d.id, d.hostname, d.employee_name, d.os, d.agent_version,
+            "SELECT d.id, d.hostname, d.employee_name, d.group_name, d.os, d.agent_version,
                     d.consent_ack, d.last_seen,
                     (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(d.last_seen)) AS ago,
                     (SELECT path FROM screenshots s WHERE s.device_id = d.id ORDER BY s.ts DESC LIMIT 1) AS last_shot,
@@ -221,7 +221,7 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/device' && $method === 'GET') {
         require_admin();
         $id  = (int) ($_GET['id'] ?? 0);
-        $dev = q1('SELECT id, hostname, employee_name, os, agent_version, consent_ack, last_seen FROM devices WHERE id = ?', [$id]);
+        $dev = q1('SELECT id, hostname, employee_name, group_name, os, agent_version, consent_ack, last_seen FROM devices WHERE id = ?', [$id]);
         if (!$dev) {
             fail('Not found.', 404);
         }
@@ -249,12 +249,62 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true, 'day' => $day, 'apps' => $apps, 'sites' => $sites, 'sample_seconds' => $cfg['sample_seconds']]);
     }
 
+    // The day's report as a CSV file (for Excel).
+    if ($path === '/api/admin/report-csv' && $method === 'GET') {
+        require_admin();
+        $id  = (int) ($_GET['id'] ?? 0);
+        $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['day'] ?? '') ? $_GET['day'] : date('Y-m-d');
+        $sec = (int) $cfg['sample_seconds'];
+        $dev = q1('SELECT employee_name, hostname FROM devices WHERE id = ?', [$id]);
+        $apps = q("SELECT active_app, COUNT(*) s, SUM(is_idle) i FROM activity WHERE device_id=? AND DATE(ts)=? AND active_app<>'' GROUP BY active_app ORDER BY s DESC", [$id, $day]);
+        $sites = q("SELECT website, COUNT(*) s FROM activity WHERE device_id=? AND DATE(ts)=? AND website<>'' GROUP BY website ORDER BY s DESC", [$id, $day]);
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="report-' . $id . '-' . $day . '.csv"');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, ['Computer', ($dev['employee_name'] ?? '') ?: ($dev['hostname'] ?? ''), 'Date', $day]);
+        fputcsv($out, []);
+        fputcsv($out, ['Application', 'Minutes', 'Idle minutes']);
+        foreach ($apps as $a) {
+            fputcsv($out, [$a['active_app'], round($a['s'] * $sec / 60), round($a['i'] * $sec / 60)]);
+        }
+        fputcsv($out, []);
+        fputcsv($out, ['Website', 'Minutes']);
+        foreach ($sites as $s) {
+            fputcsv($out, [$s['website'], round($s['s'] * $sec / 60)]);
+        }
+        fclose($out);
+        exit;
+    }
+
     if ($path === '/api/admin/enroll-key' && $method === 'POST') {
         require_admin();
         $b    = body();
         $code = enroll_code();
         x('INSERT INTO enroll_keys (enroll_key, label) VALUES (?,?)', [$code, mb_substr($b['label'] ?? '', 0, 128)]);
         json_out(['ok' => true, 'enroll_key' => $code]);
+    }
+
+    // Rename a computer / set its group.
+    if ($path === '/api/admin/device-update' && $method === 'POST') {
+        require_admin();
+        $b  = body();
+        $id = (int) ($b['id'] ?? 0);
+        if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
+            fail('Not found.', 404);
+        }
+        x('UPDATE devices SET employee_name = ?, group_name = ? WHERE id = ?',
+            [mb_substr($b['employee_name'] ?? '', 0, 190), mb_substr($b['group_name'] ?? '', 0, 190), $id]);
+        json_out(['ok' => true]);
+    }
+
+    // Remove a computer from the dashboard (hides it; data kept).
+    if ($path === '/api/admin/device-remove' && $method === 'POST') {
+        require_admin();
+        $b  = body();
+        $id = (int) ($b['id'] ?? 0);
+        x('UPDATE devices SET active = 0 WHERE id = ?', [$id]);
+        log_event($id, 'device_removed', '');
+        json_out(['ok' => true]);
     }
 
     // Send an action to a computer (the agent runs it on its next ping).
