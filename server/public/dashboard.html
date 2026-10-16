@@ -67,6 +67,15 @@
       <div>
         <img id="dShot" class="w-full rounded-lg border tile-shot">
         <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
+        <div class="mt-4 bg-slate-50 rounded-lg p-3">
+          <div class="flex items-center gap-2 mb-2">
+            <h3 class="font-semibold text-sm">Playback</h3>
+            <button id="playBtn" class="text-xs bg-slate-800 text-white rounded px-2 py-1">▶ Play</button>
+            <span id="playTs" class="text-xs text-slate-500 ml-auto"></span>
+          </div>
+          <input id="playSlider" type="range" min="0" max="0" value="0" class="w-full">
+          <p class="text-xs text-slate-400 mt-1">Scrub through this computer’s recorded frames.</p>
+        </div>
         <h3 class="font-semibold text-sm mt-4 mb-2">Recent screenshots</h3>
         <div id="dHistory" class="grid grid-cols-4 gap-2"></div>
       </div>
@@ -83,6 +92,7 @@
             <button data-cmd="lock"     class="cbtn bg-slate-800 text-white rounded-lg px-3 py-1.5">Lock screen</button>
             <button data-cmd="message"  class="cbtn bg-indigo-600 text-white rounded-lg px-3 py-1.5">Send message</button>
             <button data-cmd="live"     class="cbtn bg-emerald-600 text-white rounded-lg px-3 py-1.5">Live view (2 min)</button>
+            <button data-cmd="record"   class="cbtn bg-rose-600 text-white rounded-lg px-3 py-1.5">Record (5 min)</button>
             <button data-cmd="logoff"   class="cbtn bg-amber-600 text-white rounded-lg px-3 py-1.5">Log off</button>
             <button data-cmd="restart"  class="cbtn bg-orange-600 text-white rounded-lg px-3 py-1.5">Restart</button>
             <button data-cmd="shutdown" class="cbtn bg-red-600 text-white rounded-lg px-3 py-1.5">Shut down</button>
@@ -196,8 +206,45 @@ async function openDetail(id) {
   $('#detail').setAttribute('data-id', id);
   $('#detail').classList.remove('hidden');
   showTab('act');
+  loadFrames(id);
 }
-$('#dClose').addEventListener('click', () => $('#detail').classList.add('hidden'));
+
+// ---- playback (scrub through recorded frames) ----
+let frames = [], playTimer = null;
+async function loadFrames(id) {
+  try {
+    const d = await api('/api/admin/frames?id=' + id + '&limit=400');
+    frames = d.frames || [];
+  } catch (e) { frames = []; }
+  const sl = $('#playSlider');
+  sl.max = Math.max(0, frames.length - 1);
+  sl.value = sl.max;
+  if (frames.length) { $('#playTs').textContent = frames.length + ' frames'; }
+  else { $('#playTs').textContent = 'No frames yet'; }
+}
+function showFrame(i) {
+  if (!frames.length) return;
+  i = Math.max(0, Math.min(frames.length - 1, i | 0));
+  const f = frames[i];
+  $('#dShot').src = '/api/admin/shot?p=' + encodeURIComponent(f.path);
+  $('#dShotTs').textContent = f.ts;
+  $('#playTs').textContent = f.ts + '  (' + (i + 1) + '/' + frames.length + ')';
+}
+function stopPlay() { if (playTimer) { clearInterval(playTimer); playTimer = null; } $('#playBtn').textContent = '▶ Play'; }
+$('#playSlider').addEventListener('input', (e) => { stopPlay(); showFrame(Number(e.target.value)); });
+$('#playBtn').addEventListener('click', () => {
+  if (playTimer) return stopPlay();
+  if (!frames.length) return;
+  let i = Number($('#playSlider').value);
+  if (i >= frames.length - 1) i = 0;
+  $('#playBtn').textContent = '⏸ Pause';
+  playTimer = setInterval(() => {
+    if (i >= frames.length - 1) { stopPlay(); return; }
+    i++; $('#playSlider').value = i; showFrame(i);
+  }, 500);
+});
+
+$('#dClose').addEventListener('click', () => { stopPlay(); $('#detail').classList.add('hidden'); });
 document.querySelectorAll('.dtab').forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
 function showTab(t) {
   document.querySelectorAll('.dtab').forEach(b => {
@@ -240,6 +287,7 @@ async function sendCommand(id, type) {
   let payload = '';
   if (type === 'message') { payload = prompt('Message to show on the employee’s screen:'); if (payload === null || payload === '') return; }
   else if (type === 'live') { payload = '120'; }
+  else if (type === 'record') { payload = '5'; }
   else if (CONFIRM[type] && !confirm(CONFIRM[type])) return;
   await api('/api/admin/command', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ device_id: Number(id), type, payload }) });

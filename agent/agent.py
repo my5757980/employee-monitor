@@ -343,8 +343,9 @@ def main():
 
     interval   = int(cfg.get("sample_seconds") or 60)
     srv.token  = cfg["device_token"]
-    next_sample = 0.0
-    live_until  = 0.0
+    next_sample  = 0.0
+    live_until   = 0.0
+    record_until = 0.0
     log("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
 
     while True:
@@ -357,8 +358,10 @@ def main():
             # Actions the admin sent.
             for cmd in info.get("commands", []):
                 ok, result = run_command(cmd)
-                if cmd.get("type") == "live" and ok:
+                if ok and cmd.get("type") == "live":
                     live_until = now + int(cmd.get("payload") or 60)
+                if ok and cmd.get("type") == "record":
+                    record_until = now + int(cmd.get("payload") or 5) * 60
                 srv.command_result(cmd["id"], ok, result)
 
             # What this computer may not run / open.
@@ -366,9 +369,10 @@ def main():
             enforce_blocked_apps(pol.get("blocked_apps", []))
             enforce_blocked_sites(pol.get("blocked_sites", []))
 
-            live = now < live_until
-            due  = now >= next_sample
-            if due or live:
+            live      = now < live_until
+            recording = now < record_until
+            due       = now >= next_sample
+            if due or live or recording:
                 app, title = active_window()
                 idle = idle_seconds() > min(interval, 90)
                 if due:
@@ -377,7 +381,12 @@ def main():
                         "website": website_from(app, title), "is_idle": 1 if idle else 0,
                     })
                     next_sample = now + interval
-                if live or (due and not idle):   # skip a still screen on the slow beat
+                # Live frames are smaller so they arrive quickly; a recording keeps
+                # full frames; the slow beat skips a still screen.
+                if live:
+                    data, size = take_screenshot(1024, 45)
+                    srv.screenshot(data, size, now)
+                elif recording or (due and not idle):
                     data, size = take_screenshot()
                     srv.screenshot(data, size, now)
         except requests.RequestException as e:
@@ -387,8 +396,9 @@ def main():
 
         if args.once:
             break
-        # Pick up actions quickly (<=10s), or almost live while the admin is watching.
-        time.sleep(2 if now < live_until else max(3, min(interval, 10)))
+        # Almost live while the admin watches (1s), dense while recording (4s),
+        # otherwise just often enough to pick up actions.
+        time.sleep(1 if now < live_until else (4 if now < record_until else max(3, min(interval, 10))))
 
 
 if __name__ == "__main__":

@@ -252,7 +252,7 @@ function route(string $path, string $method, array $cfg): void
         $b    = body();
         $id   = (int) ($b['device_id'] ?? 0);
         $type = $b['type'] ?? '';
-        $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live'];
+        $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live', 'record'];
         if (!in_array($type, $allowed, true)) {
             fail('Unknown action.', 400);
         }
@@ -292,6 +292,28 @@ function route(string $path, string $method, array $cfg): void
             [$id, mb_substr($b['blocked_sites'] ?? '', 0, 8000), mb_substr($b['blocked_apps'] ?? '', 0, 8000)]);
         log_event($id, 'policy', 'updated');
         json_out(['ok' => true]);
+    }
+
+    // Frames for playback: a computer's screenshots over a time range, oldest first.
+    if ($path === '/api/admin/frames' && $method === 'GET') {
+        require_admin();
+        $id    = (int) ($_GET['id'] ?? 0);
+        $limit = max(1, min(600, (int) ($_GET['limit'] ?? 300)));
+        $from  = $_GET['from'] ?? '';
+        $to    = $_GET['to'] ?? '';
+        $sql   = 'SELECT id, ts, path FROM screenshots WHERE device_id = ?';
+        $args  = [$id];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/', $from)) {
+            $sql .= ' AND ts >= ?';
+            $args[] = str_replace('T', ' ', $from);
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/', $to)) {
+            $sql .= ' AND ts <= ?';
+            $args[] = str_replace('T', ' ', $to);
+        }
+        // newest N, then show oldest-first for playback
+        $rows = q($sql . ' ORDER BY ts DESC LIMIT ' . $limit, $args);
+        json_out(['ok' => true, 'frames' => array_reverse($rows)]);
     }
 
     // A screenshot image, admin only.
