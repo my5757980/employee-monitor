@@ -79,6 +79,22 @@ function require_device(): array
     return $dev;
 }
 
+/** Split a textarea value into a clean list of non-empty, trimmed lines. */
+function lines(?string $text): array
+{
+    if (!$text) {
+        return [];
+    }
+    $out = [];
+    foreach (preg_split('/[\r\n,]+/', $text) as $line) {
+        $line = trim($line);
+        if ($line !== '') {
+            $out[] = $line;
+        }
+    }
+    return array_values(array_unique($out));
+}
+
 function log_event(?int $deviceId, string $type, string $detail = ''): void
 {
     x('INSERT INTO events (device_id, type, detail) VALUES (?,?,?)', [$deviceId, $type, mb_substr($detail, 0, 500)]);

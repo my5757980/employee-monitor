@@ -73,6 +73,28 @@ CREATE TABLE IF NOT EXISTS screenshots (
   KEY (device_id, ts)
 );
 
+-- Actions the admin sends to a computer; the agent picks them up on its next ping.
+CREATE TABLE IF NOT EXISTS commands (
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  device_id  INT NOT NULL,
+  type       VARCHAR(32)  NOT NULL,            -- message | lock | logoff | restart | shutdown | live
+  payload    VARCHAR(1000) NOT NULL DEFAULT '',
+  status     ENUM('pending','sent','done','failed') NOT NULL DEFAULT 'pending',
+  result     VARCHAR(255) NOT NULL DEFAULT '',
+  created_by INT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  done_at    TIMESTAMP NULL,
+  KEY (device_id, status)
+);
+
+-- What a computer is not allowed to run or open (one row per device).
+CREATE TABLE IF NOT EXISTS policies (
+  device_id     INT PRIMARY KEY,
+  blocked_sites TEXT NULL,                     -- domains, one per line
+  blocked_apps  TEXT NULL,                     -- executable names, one per line
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Notable events: agent start/stop, admin login, device enrolled...
 CREATE TABLE IF NOT EXISTS events (
   id        BIGINT AUTO_INCREMENT PRIMARY KEY,

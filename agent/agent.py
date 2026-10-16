@@ -24,7 +24,9 @@ import io
 import json
 import os
 import platform
+import re
 import socket
+import subprocess
 import sys
 import time
 
@@ -39,6 +41,7 @@ except Exception as e:  # pragma: no cover
 
 AGENT_VERSION = "1.0.0"
 IS_WIN = sys.platform.startswith("win")
+NO_DIALOG = False  # set by --no-dialog; prints notices instead of pop-ups (tests/services)
 
 # ----- where the agent keeps its config (server URL + this device's token) -----
 def config_path():
@@ -169,6 +172,13 @@ class Server:
         r.raise_for_status()
         return r.json()
 
+    def command_result(self, cmd_id, ok, result=""):
+        try:
+            self.s.post(self.base + "/api/agent/command-result", timeout=30,
+                        headers=self._headers(), json={"id": cmd_id, "ok": ok, "result": result})
+        except requests.RequestException:
+            pass
+
     def activity(self, sample):
         r = self.s.post(self.base + "/api/agent/activity", timeout=30,
                         headers=self._headers(), json=sample)
@@ -184,13 +194,103 @@ class Server:
         return r.json()
 
 
+# ----- actions the admin can send -----
+def run_command(cmd):
+    """Returns (ok, result_text). 'live' is handled by the caller (timing)."""
+    t = cmd.get("type")
+    payload = cmd.get("payload") or ""
+    try:
+        if t == "message":
+            show_notice("Message from your administrator:\n\n" + payload, dialog=not NO_DIALOG)
+            return True, "shown"
+        if t == "lock":
+            if IS_WIN:
+                ctypes.windll.user32.LockWorkStation()
+                return True, "locked"
+            return False, "windows only"
+        if t in ("logoff", "restart", "shutdown"):
+            if not IS_WIN:
+                return False, "windows only"
+            flag = {"logoff": "/l", "restart": "/r", "shutdown": "/s"}[t]
+            args = ["shutdown", flag]
+            if t != "logoff":
+                args += ["/t", "15", "/c", (payload or "Your administrator scheduled this.")[:120]]
+            subprocess.run(args, capture_output=True)
+            return True, t + " scheduled"
+        if t == "live":
+            return True, "live"
+    except Exception as e:
+        return False, str(e)[:120]
+    return False, "unknown action"
+
+
+# ----- policy enforcement (block apps and websites) -----
+HOSTS = r"C:\Windows\System32\drivers\etc\hosts"
+MARK_BEGIN = "# >>> EmployeeMonitor blocked sites >>>"
+MARK_END = "# <<< EmployeeMonitor blocked sites <<<"
+_applied_sites = None
+_site_block_warned = False
+
+
+def enforce_blocked_apps(apps):
+    if not apps:
+        return
+    want = {a.lower() for a in apps}
+    try:
+        import psutil
+    except Exception:
+        return
+    for p in psutil.process_iter(["name"]):
+        try:
+            name = (p.info["name"] or "").lower()
+            if name and name in want:
+                p.kill()
+        except Exception:
+            pass
+
+
+def enforce_blocked_sites(sites):
+    """Point blocked domains at 0.0.0.0 in the hosts file (needs admin)."""
+    global _applied_sites, _site_block_warned
+    if not IS_WIN:
+        return
+    key = tuple(sorted(s.lower() for s in sites))
+    if key == _applied_sites:
+        return
+    try:
+        with open(HOSTS, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+    except Exception:
+        return
+    stripped = re.sub(re.escape(MARK_BEGIN) + r".*?" + re.escape(MARK_END) + r"\n?", "", content, flags=re.S)
+    block = ""
+    if sites:
+        rows = "".join("0.0.0.0 %s\n0.0.0.0 www.%s\n" % (d, d) for d in sites)
+        block = MARK_BEGIN + "\n" + rows + MARK_END + "\n"
+    new = stripped.rstrip() + "\n" + block
+    if new == content:
+        _applied_sites = key
+        return
+    try:
+        with open(HOSTS, "w", encoding="utf-8") as f:
+            f.write(new)
+        subprocess.run(["ipconfig", "/flushdns"], capture_output=True)
+        _applied_sites = key
+    except PermissionError:
+        if not _site_block_warned:
+            print("note: website blocking needs the agent to run as administrator.")
+            _site_block_warned = True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", help="server base URL, e.g. https://monitor.example.com")
     ap.add_argument("--key", help="enrollment key (first run only)")
     ap.add_argument("--once", action="store_true", help="send one sample and exit (for testing)")
-    ap.add_argument("--no-dialog", action="store_true", help="print the monitoring notice instead of a pop-up")
+    ap.add_argument("--no-dialog", action="store_true", help="print notices instead of pop-ups (tests/services)")
     args = ap.parse_args()
+    global NO_DIALOG
+    NO_DIALOG = args.no_dialog
 
     cfg = load_config()
     base = args.server or cfg.get("server")
@@ -220,34 +320,54 @@ def main():
         cfg["consent_ack"] = 1
         save_config(cfg)
 
-    interval = int(cfg.get("sample_seconds") or 60)
+    interval   = int(cfg.get("sample_seconds") or 60)
+    srv.token  = cfg["device_token"]
+    next_sample = 0.0
+    live_until  = 0.0
     print("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
 
     while True:
+        now = time.time()
         try:
-            app, title = active_window()
-            idle = idle_seconds() > min(interval, 90)
-            srv.token = cfg["device_token"]
             info = srv.ping(cfg.get("consent_ack", 1))
             if info.get("sample_seconds"):
                 interval = int(info["sample_seconds"])
-            srv.activity({
-                "ts": int(time.time()),
-                "active_app": app,
-                "window_title": title,
-                "website": website_from(app, title),
-                "is_idle": 1 if idle else 0,
-            })
-            if not idle:  # no need to store a screenshot of an untouched screen every time
-                data, size = take_screenshot()
-                srv.screenshot(data, size, time.time())
+
+            # Actions the admin sent.
+            for cmd in info.get("commands", []):
+                ok, result = run_command(cmd)
+                if cmd.get("type") == "live" and ok:
+                    live_until = now + int(cmd.get("payload") or 60)
+                srv.command_result(cmd["id"], ok, result)
+
+            # What this computer may not run / open.
+            pol = info.get("policy", {})
+            enforce_blocked_apps(pol.get("blocked_apps", []))
+            enforce_blocked_sites(pol.get("blocked_sites", []))
+
+            live = now < live_until
+            due  = now >= next_sample
+            if due or live:
+                app, title = active_window()
+                idle = idle_seconds() > min(interval, 90)
+                if due:
+                    srv.activity({
+                        "ts": int(now), "active_app": app, "window_title": title,
+                        "website": website_from(app, title), "is_idle": 1 if idle else 0,
+                    })
+                    next_sample = now + interval
+                if live or (due and not idle):   # skip a still screen on the slow beat
+                    data, size = take_screenshot()
+                    srv.screenshot(data, size, now)
         except requests.RequestException as e:
             print("network:", str(e)[:120])
         except Exception as e:
             print("error:", str(e)[:160])
+
         if args.once:
             break
-        time.sleep(interval)
+        # Pick up actions quickly (<=10s), or almost live while the admin is watching.
+        time.sleep(2 if now < live_until else max(3, min(interval, 10)))
 
 
 if __name__ == "__main__":

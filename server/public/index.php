@@ -70,11 +70,35 @@ function route(string $path, string $method, array $cfg): void
         $b   = body();
         x('UPDATE devices SET last_seen = NOW(), consent_ack = GREATEST(consent_ack, ?) WHERE id = ?',
             [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $dev['id']]);
+
+        // Hand over any pending actions, once (mark them 'sent' so they don't repeat).
+        $cmds = q('SELECT id, type, payload FROM commands WHERE device_id = ? AND status = ? ORDER BY id', [$dev['id'], 'pending']);
+        if ($cmds) {
+            $ids = implode(',', array_map(fn ($c) => (int) $c['id'], $cmds));
+            db()->exec("UPDATE commands SET status = 'sent' WHERE id IN ($ids)");
+        }
+        $pol = q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$dev['id']]);
+
         json_out([
             'ok'             => true,
             'sample_seconds' => $cfg['sample_seconds'],
             'consent_notice' => $cfg['consent_notice'],
+            'commands'       => $cmds,
+            'policy'         => [
+                'blocked_sites' => lines($pol['blocked_sites'] ?? ''),
+                'blocked_apps'  => lines($pol['blocked_apps'] ?? ''),
+            ],
         ]);
+    }
+
+    if ($path === '/api/agent/command-result' && $method === 'POST') {
+        $dev = require_device();
+        $b   = body();
+        $id  = (int) ($b['id'] ?? 0);
+        $ok  = !empty($b['ok']);
+        x('UPDATE commands SET status = ?, result = ?, done_at = NOW() WHERE id = ? AND device_id = ?',
+            [$ok ? 'done' : 'failed', mb_substr($b['result'] ?? '', 0, 255), $id, $dev['id']]);
+        json_out(['ok' => true]);
     }
 
     if ($path === '/api/agent/activity' && $method === 'POST') {
@@ -220,6 +244,54 @@ function route(string $path, string $method, array $cfg): void
         $code = enroll_code();
         x('INSERT INTO enroll_keys (enroll_key, label) VALUES (?,?)', [$code, mb_substr($b['label'] ?? '', 0, 128)]);
         json_out(['ok' => true, 'enroll_key' => $code]);
+    }
+
+    // Send an action to a computer (the agent runs it on its next ping).
+    if ($path === '/api/admin/command' && $method === 'POST') {
+        $a    = require_admin();
+        $b    = body();
+        $id   = (int) ($b['device_id'] ?? 0);
+        $type = $b['type'] ?? '';
+        $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live'];
+        if (!in_array($type, $allowed, true)) {
+            fail('Unknown action.', 400);
+        }
+        if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
+            fail('Not found.', 404);
+        }
+        $cid = x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
+            [$id, $type, mb_substr($b['payload'] ?? '', 0, 1000), $a['id']]);
+        log_event($id, 'command', $type . ' ' . ($b['payload'] ?? ''));
+        json_out(['ok' => true, 'command_id' => $cid]);
+    }
+
+    // The recent actions sent to a computer, with their outcome.
+    if ($path === '/api/admin/commands' && $method === 'GET') {
+        require_admin();
+        $id = (int) ($_GET['id'] ?? 0);
+        json_out(['ok' => true, 'commands' => q(
+            'SELECT id, type, payload, status, result, created_at, done_at FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 30', [$id])]);
+    }
+
+    // Read or set what a computer may not run/open.
+    if ($path === '/api/admin/policy' && $method === 'GET') {
+        require_admin();
+        $id  = (int) ($_GET['id'] ?? 0);
+        $pol = q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$id]);
+        json_out(['ok' => true, 'blocked_sites' => $pol['blocked_sites'] ?? '', 'blocked_apps' => $pol['blocked_apps'] ?? '']);
+    }
+    if ($path === '/api/admin/policy' && $method === 'POST') {
+        require_admin();
+        $b  = body();
+        $id = (int) ($b['device_id'] ?? 0);
+        if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
+            fail('Not found.', 404);
+        }
+        x('INSERT INTO policies (device_id, blocked_sites, blocked_apps) VALUES (?,?,?)
+           ON DUPLICATE KEY UPDATE blocked_sites = VALUES(blocked_sites), blocked_apps = VALUES(blocked_apps)',
+            [$id, mb_substr($b['blocked_sites'] ?? '', 0, 8000), mb_substr($b['blocked_apps'] ?? '', 0, 8000)]);
+        log_event($id, 'policy', 'updated');
+        json_out(['ok' => true]);
     }
 
     // A screenshot image, admin only.
