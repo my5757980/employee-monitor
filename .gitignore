@@ -1,0 +1,7 @@
+data/
+*.log
+.env
+__pycache__/
+*.pyc
+agent/dist/
+agent/build/

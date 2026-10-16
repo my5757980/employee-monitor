@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employee Monitor</title>
+<script src="https://cdn.tailwindcss.com/3.4.14"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .tile-shot { aspect-ratio: 16/10; object-fit: cover; background:#0f172a; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+<!-- ======== LOGIN ======== -->
+<div id="login" class="min-h-screen flex items-center justify-center p-4">
+  <form id="loginForm" class="bg-white w-full max-w-sm rounded-2xl shadow p-7">
+    <div class="flex items-center gap-2 mb-1">
+      <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white grid place-items-center font-bold">EM</div>
+      <h1 class="text-lg font-bold">Employee Monitor</h1>
+    </div>
+    <p class="text-sm text-slate-500 mb-5">Sign in to the monitoring dashboard.</p>
+    <label class="block text-xs font-semibold text-slate-600 mb-1">Username</label>
+    <input id="u" class="w-full border rounded-lg px-3 py-2 mb-3" autocomplete="username">
+    <label class="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+    <input id="p" type="password" class="w-full border rounded-lg px-3 py-2 mb-4" autocomplete="current-password">
+    <button class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 font-semibold">Sign in</button>
+    <p id="loginErr" class="text-sm text-red-600 mt-3 hidden"></p>
+  </form>
+</div>
+
+<!-- ======== APP ======== -->
+<div id="app" class="hidden">
+  <header class="bg-white border-b sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white grid place-items-center font-bold text-sm">EM</div>
+      <h1 class="font-bold">Employee Monitor</h1>
+      <span id="counts" class="text-sm text-slate-500"></span>
+      <div class="ml-auto flex items-center gap-2">
+        <button id="addBtn" class="text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg px-3 py-1.5 font-semibold">+ Add a computer</button>
+        <span id="who" class="text-sm text-slate-600"></span>
+        <button id="logout" class="text-sm text-slate-500 hover:text-slate-800">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <div id="empty" class="hidden text-center text-slate-500 py-20">
+      <p class="text-lg font-semibold mb-1">No computers yet</p>
+      <p class="text-sm">Click “Add a computer” to create an install key, then install the agent on that PC.</p>
+    </div>
+    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+  </main>
+</div>
+
+<!-- ======== DETAIL PANEL ======== -->
+<div id="detail" class="hidden fixed inset-0 z-20 bg-black/50 p-4 overflow-auto">
+  <div class="bg-white max-w-5xl mx-auto rounded-2xl shadow-lg">
+    <div class="flex items-center gap-3 p-4 border-b">
+      <div>
+        <h2 id="dName" class="font-bold text-lg"></h2>
+        <p id="dSub" class="text-xs text-slate-500"></p>
+      </div>
+      <button id="dClose" class="ml-auto text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4 p-4">
+      <div>
+        <img id="dShot" class="w-full rounded-lg border tile-shot">
+        <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
+        <h3 class="font-semibold text-sm mt-4 mb-2">Recent screenshots</h3>
+        <div id="dHistory" class="grid grid-cols-4 gap-2"></div>
+      </div>
+      <div>
+        <div class="flex gap-4 border-b mb-2">
+          <button data-tab="act" class="dtab pb-2 text-sm font-semibold border-b-2 border-indigo-600">Activity</button>
+          <button data-tab="rep" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Today’s report</button>
+        </div>
+        <div id="dAct" class="text-sm max-h-[28rem] overflow-auto"></div>
+        <div id="dRep" class="hidden text-sm max-h-[28rem] overflow-auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== ADD-COMPUTER MODAL ======== -->
+<div id="addModal" class="hidden fixed inset-0 z-30 bg-black/50 p-4 grid place-items-center">
+  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-6">
+    <h2 class="font-bold text-lg mb-1">Add a computer</h2>
+    <p class="text-sm text-slate-500 mb-4">Create an install key, then run the agent installer on that company computer and type the key once.</p>
+    <label class="block text-xs font-semibold text-slate-600 mb-1">Label (e.g. employee name or desk)</label>
+    <input id="addLabel" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="Reception PC">
+    <button id="addMake" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 font-semibold">Create install key</button>
+    <div id="addResult" class="hidden mt-4">
+      <p class="text-xs text-slate-500 mb-1">Install key (type it in the agent once):</p>
+      <div class="flex items-center gap-2">
+        <code id="addKey" class="flex-1 bg-slate-100 rounded-lg px-3 py-2 font-mono text-sm select-all"></code>
+        <button id="addCopy" class="text-sm bg-slate-200 hover:bg-slate-300 rounded-lg px-3 py-2">Copy</button>
+      </div>
+    </div>
+    <button id="addClose" class="w-full text-slate-500 hover:text-slate-800 text-sm mt-4">Close</button>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+async function api(path, opts = {}) {
+  const r = await fetch(path, { credentials: 'same-origin', ...opts });
+  let data = null; try { data = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((data && data.error) || 'Request failed');
+  return data;
+}
+const fmtAgo = (s) => s == null ? 'never' : s < 60 ? 'just now' : s < 3600 ? Math.floor(s/60)+'m ago' : s < 86400 ? Math.floor(s/3600)+'h ago' : Math.floor(s/86400)+'d ago';
+const esc = (t) => (t||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---- login ----
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#loginErr').classList.add('hidden');
+  try {
+    await api('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username: $('#u').value, password: $('#p').value }) });
+    start();
+  } catch (err) { $('#loginErr').textContent = err.message; $('#loginErr').classList.remove('hidden'); }
+});
+$('#logout').addEventListener('click', async () => { await api('/api/admin/logout', {method:'POST'}); location.reload(); });
+
+// ---- the grid ----
+let timer = null;
+async function loadDevices() {
+  const d = await api('/api/admin/devices');
+  $('#counts').textContent = d.devices.length + ' computer' + (d.devices.length===1?'':'s') + ' • ' +
+      d.devices.filter(x=>x.online).length + ' online';
+  $('#empty').classList.toggle('hidden', d.devices.length > 0);
+  $('#grid').innerHTML = d.devices.map(tile).join('');
+  document.querySelectorAll('[data-dev]').forEach(el =>
+    el.addEventListener('click', () => openDetail(el.getAttribute('data-dev'))));
+}
+function tile(x) {
+  const shot = x.last_shot ? `/api/admin/shot?p=${encodeURIComponent(x.last_shot)}` : '';
+  const dot  = x.online ? 'bg-emerald-500' : 'bg-slate-300';
+  const name = esc(x.employee_name || x.hostname || ('PC #'+x.id));
+  const act  = x.is_idle ? 'Idle' : esc(x.active_app || '—');
+  return `<div data-dev="${x.id}" class="bg-white rounded-xl shadow-sm hover:shadow-md cursor-pointer overflow-hidden border">
+    ${shot ? `<img src="${shot}" class="tile-shot w-full">` : `<div class="tile-shot w-full grid place-items-center text-slate-500 text-sm">No screenshot yet</div>`}
+    <div class="p-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full ${dot}"></span>
+        <span class="font-semibold text-sm truncate">${name}</span>
+        <span class="ml-auto text-xs text-slate-400">${fmtAgo(x.ago)}</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1 truncate">${act}</p>
+    </div></div>`;
+}
+
+// ---- detail ----
+async function openDetail(id) {
+  const { device: d } = await api('/api/admin/device?id=' + id);
+  $('#dName').textContent = d.employee_name || d.hostname || ('PC #'+d.id);
+  $('#dSub').textContent  = [d.hostname, d.os, 'agent '+d.agent_version, d.consent_ack ? 'notice shown' : 'notice pending'].filter(Boolean).join(' • ');
+  const shots = d.screenshots || [];
+  if (shots.length) {
+    $('#dShot').src = '/api/admin/shot?p=' + encodeURIComponent(shots[0].path);
+    $('#dShotTs').textContent = 'Latest: ' + shots[0].ts;
+  } else { $('#dShot').removeAttribute('src'); $('#dShotTs').textContent = 'No screenshots yet'; }
+  $('#dHistory').innerHTML = shots.slice(0,12).map(s =>
+    `<img src="/api/admin/shot?p=${encodeURIComponent(s.path)}" title="${s.ts}" class="tile-shot rounded border cursor-pointer"
+       onclick="document.querySelector('#dShot').src=this.src;document.querySelector('#dShotTs').textContent='${s.ts}'">`).join('');
+  $('#dAct').innerHTML = (d.activity||[]).map(a =>
+    `<div class="py-1.5 border-b flex gap-2">
+       <span class="text-xs text-slate-400 w-28 shrink-0">${a.ts}</span>
+       <span class="flex-1">${a.is_idle==1?'<span class="text-amber-600">Idle</span>':esc(a.active_app)}
+         <span class="text-slate-400">${esc(a.website || a.window_title)}</span></span>
+     </div>`).join('') || '<p class="text-slate-400 py-4">No activity yet.</p>';
+  $('#detail').setAttribute('data-id', id);
+  $('#detail').classList.remove('hidden');
+  showTab('act');
+}
+$('#dClose').addEventListener('click', () => $('#detail').classList.add('hidden'));
+document.querySelectorAll('.dtab').forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
+function showTab(t) {
+  document.querySelectorAll('.dtab').forEach(b => {
+    const on = b.getAttribute('data-tab') === t;
+    b.classList.toggle('border-indigo-600', on); b.classList.toggle('text-slate-500', !on); b.classList.toggle('border-transparent', !on);
+  });
+  $('#dAct').classList.toggle('hidden', t !== 'act');
+  $('#dRep').classList.toggle('hidden', t !== 'rep');
+  if (t === 'rep') loadReport($('#detail').getAttribute('data-id'));
+}
+async function loadReport(id) {
+  const r = await api('/api/admin/report?id=' + id);
+  const mins = (n) => Math.round(n * r.sample_seconds / 60);
+  const row = (label, n, extra='') => `<div class="flex items-center gap-2 py-1 border-b">
+      <span class="flex-1 truncate">${esc(label)}</span><span class="text-slate-400 text-xs">${extra}</span>
+      <span class="font-semibold w-16 text-right">${mins(n)} min</span></div>`;
+  $('#dRep').innerHTML =
+    `<h4 class="font-semibold mt-1 mb-1">Applications — ${r.day}</h4>` +
+    (r.apps.map(a => row(a.active_app, a.samples, a.idle>0?('idle '+mins(a.idle)+'m'):'')).join('') || '<p class="text-slate-400 py-2">No data.</p>') +
+    `<h4 class="font-semibold mt-4 mb-1">Websites</h4>` +
+    (r.sites.map(s => row(s.website, s.samples)).join('') || '<p class="text-slate-400 py-2">No data.</p>');
+}
+
+// ---- add computer ----
+$('#addBtn').addEventListener('click', () => { $('#addResult').classList.add('hidden'); $('#addLabel').value=''; $('#addModal').classList.remove('hidden'); });
+$('#addClose').addEventListener('click', () => $('#addModal').classList.add('hidden'));
+$('#addMake').addEventListener('click', async () => {
+  const d = await api('/api/admin/enroll-key', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ label: $('#addLabel').value }) });
+  $('#addKey').textContent = d.enroll_key; $('#addResult').classList.remove('hidden');
+});
+$('#addCopy').addEventListener('click', () => navigator.clipboard.writeText($('#addKey').textContent));
+
+// ---- boot ----
+async function start() {
+  $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
+  const me = await api('/api/admin/me'); $('#who').textContent = me.name;
+  await loadDevices();
+  clearInterval(timer); timer = setInterval(loadDevices, 15000);
+}
+(async () => { try { await api('/api/admin/me'); start(); } catch (e) { $('#login').classList.remove('hidden'); } })();
+</script>
+</body>
+</html>
