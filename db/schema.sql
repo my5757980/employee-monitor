@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS policies (
   updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- The latest list of running applications on a computer (one row per device,
+-- replaced each time; only sent while an admin is watching live).
+CREATE TABLE IF NOT EXISTS device_procs (
+  device_id INT PRIMARY KEY,
+  ts        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  apps      TEXT NULL
+);
+
 -- Notable events: agent start/stop, admin login, device enrolled...
 CREATE TABLE IF NOT EXISTS events (
   id        BIGINT AUTO_INCREMENT PRIMARY KEY,

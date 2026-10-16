@@ -83,10 +83,15 @@
         <div class="flex gap-4 border-b mb-2">
           <button data-tab="act" class="dtab pb-2 text-sm font-semibold border-b-2 border-indigo-600">Activity</button>
           <button data-tab="rep" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Today’s report</button>
+          <button data-tab="apps" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Apps</button>
           <button data-tab="ctl" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Controls</button>
         </div>
         <div id="dAct" class="text-sm max-h-[28rem] overflow-auto"></div>
         <div id="dRep" class="hidden text-sm max-h-[28rem] overflow-auto"></div>
+        <div id="dApps" class="hidden text-sm max-h-[28rem] overflow-auto">
+          <p class="text-xs text-slate-500 mb-2">Running applications (updates while <b>Live view</b> is on). “Stop” closes it now and keeps it blocked.</p>
+          <div id="appsList"></div>
+        </div>
         <div id="dCtl" class="hidden text-sm max-h-[28rem] overflow-auto pr-1">
           <div class="flex flex-wrap gap-2 mb-4">
             <button data-cmd="lock"     class="cbtn bg-slate-800 text-white rounded-lg px-3 py-1.5">Lock screen</button>
@@ -253,10 +258,29 @@ function showTab(t) {
   });
   $('#dAct').classList.toggle('hidden', t !== 'act');
   $('#dRep').classList.toggle('hidden', t !== 'rep');
+  $('#dApps').classList.toggle('hidden', t !== 'apps');
   $('#dCtl').classList.toggle('hidden', t !== 'ctl');
   const id = $('#detail').getAttribute('data-id');
   if (t === 'rep') loadReport(id);
   if (t === 'ctl') loadControls(id);
+  if (t === 'apps') loadApps(id);
+}
+async function loadApps(id) {
+  const d = await api('/api/admin/procs?id=' + id);
+  const apps = d.apps || [];
+  $('#appsList').innerHTML = apps.length ? apps.map(a =>
+    `<div class="flex items-center gap-2 py-1 border-b">
+       <span class="flex-1 truncate font-mono text-xs">${esc(a)}</span>
+       <button data-stop="${esc(a)}" class="stopApp text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded px-2 py-0.5">Stop</button>
+     </div>`).join('') +
+    `<p class="text-xs text-slate-400 mt-2">${apps.length} programs • ${d.ts || ''}</p>`
+    : '<p class="text-slate-400 py-3">No list yet — turn on <b>Live view</b> and it fills in.</p>';
+  document.querySelectorAll('.stopApp').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Stop and block "' + b.getAttribute('data-stop') + '" on this computer?')) return;
+    await api('/api/admin/block-app', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ device_id: Number(id), app: b.getAttribute('data-stop') }) });
+    b.textContent = 'Blocked'; b.classList.add('text-slate-400');
+  }));
 }
 
 // control buttons + restrictions (wired once; the panel is always in the DOM)

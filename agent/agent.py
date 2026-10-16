@@ -200,6 +200,13 @@ class Server:
         except requests.RequestException:
             pass
 
+    def procs(self, apps):
+        try:
+            self.s.post(self.base + "/api/agent/procs", timeout=30,
+                        headers=self._headers(), json={"apps": apps})
+        except requests.RequestException:
+            pass
+
     def activity(self, sample):
         r = self.s.post(self.base + "/api/agent/activity", timeout=30,
                         headers=self._headers(), json=sample)
@@ -251,6 +258,23 @@ MARK_BEGIN = "# >>> EmployeeMonitor blocked sites >>>"
 MARK_END = "# <<< EmployeeMonitor blocked sites <<<"
 _applied_sites = None
 _site_block_warned = False
+
+
+def running_apps():
+    """Distinct program names currently running (for the admin's 'running apps' list)."""
+    try:
+        import psutil
+    except Exception:
+        return []
+    seen = {}
+    for p in psutil.process_iter(["name"]):
+        try:
+            n = (p.info["name"] or "").strip()
+            if n:
+                seen[n.lower()] = n
+        except Exception:
+            pass
+    return sorted(seen.values(), key=lambda s: s.lower())[:80]
 
 
 def enforce_blocked_apps(apps):
@@ -346,6 +370,7 @@ def main():
     next_sample  = 0.0
     live_until   = 0.0
     record_until = 0.0
+    last_procs   = 0.0
     log("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
 
     while True:
@@ -386,6 +411,9 @@ def main():
                 if live:
                     data, size = take_screenshot(1024, 45)
                     srv.screenshot(data, size, now)
+                    if now - last_procs > 4:          # the running-apps list, while watching
+                        srv.procs(running_apps())
+                        last_procs = now
                 elif recording or (due and not idle):
                     data, size = take_screenshot()
                     srv.screenshot(data, size, now)

@@ -149,6 +149,17 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true]);
     }
 
+    if ($path === '/api/agent/procs' && $method === 'POST') {
+        $dev  = require_device();
+        $b    = body();
+        $apps = array_slice(array_values(array_filter(array_map(
+            fn ($a) => mb_substr(trim((string) $a), 0, 120), $b['apps'] ?? []))), 0, 80);
+        x('INSERT INTO device_procs (device_id, ts, apps) VALUES (?, NOW(), ?)
+           ON DUPLICATE KEY UPDATE ts = NOW(), apps = VALUES(apps)',
+            [$dev['id'], json_encode($apps, JSON_UNESCAPED_UNICODE)]);
+        json_out(['ok' => true]);
+    }
+
     // ============ ADMIN API (the dashboard) ============
     if ($path === '/api/admin/login' && $method === 'POST') {
         $b    = body();
@@ -271,6 +282,36 @@ function route(string $path, string $method, array $cfg): void
         $id = (int) ($_GET['id'] ?? 0);
         json_out(['ok' => true, 'commands' => q(
             'SELECT id, type, payload, status, result, created_at, done_at FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 30', [$id])]);
+    }
+
+    // The computer's latest running-applications list (sent while watching live).
+    if ($path === '/api/admin/procs' && $method === 'GET') {
+        require_admin();
+        $id  = (int) ($_GET['id'] ?? 0);
+        $row = q1('SELECT ts, apps FROM device_procs WHERE device_id = ?', [$id]);
+        $apps = $row && $row['apps'] ? json_decode($row['apps'], true) : [];
+        json_out(['ok' => true, 'ts' => $row['ts'] ?? null, 'apps' => is_array($apps) ? $apps : []]);
+    }
+
+    // Stop an application now and keep it blocked (adds it to the block list).
+    if ($path === '/api/admin/block-app' && $method === 'POST') {
+        require_admin();
+        $b   = body();
+        $id  = (int) ($b['device_id'] ?? 0);
+        $app = mb_substr(trim($b['app'] ?? ''), 0, 120);
+        if (!$app || !q1('SELECT id FROM devices WHERE id = ?', [$id])) {
+            fail('Not found.', 404);
+        }
+        $pol  = q1('SELECT blocked_apps FROM policies WHERE device_id = ?', [$id]);
+        $list = lines($pol['blocked_apps'] ?? '');
+        if (!in_array($app, $list, true)) {
+            $list[] = $app;
+        }
+        $text = implode("\n", $list);
+        x('INSERT INTO policies (device_id, blocked_apps) VALUES (?,?)
+           ON DUPLICATE KEY UPDATE blocked_apps = VALUES(blocked_apps)', [$id, $text]);
+        log_event($id, 'block_app', $app);
+        json_out(['ok' => true, 'blocked_apps' => $text]);
     }
 
     // Read or set what a computer may not run/open.
