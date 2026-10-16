@@ -1,0 +1,13 @@
+# Apache strips the Authorization header from the CGI/mod_php environment by
+# default, so the agent's "Authorization: Bearer <token>" never reaches PHP.
+# Re-expose it as HTTP_AUTHORIZATION (read by require_device() in src/http.php).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+
+# Belt and suspenders for Apache 2.4.13+ (mod_php honours this too).
+<IfModule mod_php.c>
+  CGIPassAuth On
+</IfModule>

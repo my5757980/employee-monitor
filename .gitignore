@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 agent/dist/
 agent/build/
+deploy/

@@ -60,10 +60,30 @@ function require_admin(): array
     return $row;
 }
 
+/** Read the raw Authorization header no matter how the web server exposes it.
+ * Apache/mod_php often drops it from $_SERVER; a .htaccess rewrite re-adds it as
+ * REDIRECT_HTTP_AUTHORIZATION, and apache_request_headers() has it directly. */
+function auth_header(): string
+{
+    foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $k) {
+        if (!empty($_SERVER[$k])) {
+            return $_SERVER[$k];
+        }
+    }
+    if (function_exists('apache_request_headers')) {
+        foreach (apache_request_headers() as $name => $val) {
+            if (strcasecmp($name, 'Authorization') === 0 && $val !== '') {
+                return $val;
+            }
+        }
+    }
+    return '';
+}
+
 /** The device behind an agent request, from its Bearer token - or 401. */
 function require_device(): array
 {
-    $hdr = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $hdr = auth_header();
     if (stripos($hdr, 'Bearer ') === 0) {
         $tok = trim(substr($hdr, 7));
     } else {
