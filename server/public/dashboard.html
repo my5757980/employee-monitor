@@ -6,11 +6,17 @@
 <title>Employee Monitor</title>
 <script src="https://cdn.tailwindcss.com/3.4.14"></script>
 <style>
+  :root { color-scheme: light; }
+  html, body { overflow-x: hidden; }
   body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   .tile-shot { aspect-ratio: 16/10; object-fit: cover; background:#0f172a; }
+  input[type=range] { accent-color:#4f46e5; }
+  .scrollx::-webkit-scrollbar { height: 0; }
+  .thin::-webkit-scrollbar { width: 7px; height: 7px; }
+  .thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius: 4px; }
 </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="bg-slate-50 text-slate-800">
 
 <!-- ======== LOGIN ======== -->
 <div id="login" class="min-h-screen flex items-center justify-center p-4">
@@ -31,43 +37,48 @@
 
 <!-- ======== APP ======== -->
 <div id="app" class="hidden">
-  <header class="bg-white border-b sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white grid place-items-center font-bold text-sm">EM</div>
-      <h1 class="font-bold">Employee Monitor</h1>
-      <span id="counts" class="text-sm text-slate-500"></span>
-      <div class="ml-auto flex items-center gap-2">
-        <button id="addBtn" class="text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg px-3 py-1.5 font-semibold">+ Add a computer</button>
-        <span id="who" class="text-sm text-slate-600"></span>
-        <button id="logout" class="text-sm text-slate-500 hover:text-slate-800">Sign out</button>
+  <header class="bg-white/90 backdrop-blur border-b border-slate-200 sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-3 sm:px-5 h-14 flex items-center gap-2 sm:gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white grid place-items-center font-extrabold text-sm shrink-0">EM</div>
+      <div class="min-w-0">
+        <h1 class="font-bold leading-tight truncate">Employee Monitor</h1>
+        <p id="counts" class="text-xs text-slate-500 leading-tight truncate"></p>
+      </div>
+      <div class="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <button id="addBtn" class="text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-2.5 sm:px-3 py-1.5 font-semibold">
+          <span class="sm:hidden">+ Add</span><span class="hidden sm:inline">+ Add computer</span>
+        </button>
+        <span id="who" class="hidden md:inline text-sm text-slate-600 max-w-[9rem] truncate"></span>
+        <button id="logout" class="text-sm text-slate-500 hover:text-slate-800 px-1">Sign&nbsp;out</button>
       </div>
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-6">
-    <div id="empty" class="hidden text-center text-slate-500 py-20">
-      <p class="text-lg font-semibold mb-1">No computers yet</p>
-      <p class="text-sm">Click “Add a computer” to create an install key, then install the agent on that PC.</p>
+  <main class="max-w-7xl mx-auto px-3 sm:px-5 py-5 sm:py-6">
+    <div id="empty" class="hidden text-center text-slate-500 py-16 sm:py-24">
+      <div class="w-14 h-14 rounded-2xl bg-slate-100 grid place-items-center mx-auto mb-3 text-2xl">🖥️</div>
+      <p class="text-lg font-semibold text-slate-700 mb-1">No computers yet</p>
+      <p class="text-sm max-w-sm mx-auto">Tap <b>+ Add computer</b> to get an install key, then run the agent installer on that computer.</p>
     </div>
-    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4"></div>
   </main>
 </div>
 
 <!-- ======== DETAIL PANEL ======== -->
-<div id="detail" class="hidden fixed inset-0 z-20 bg-black/50 p-4 overflow-auto">
-  <div class="bg-white max-w-5xl mx-auto rounded-2xl shadow-lg">
-    <div class="flex items-center gap-3 p-4 border-b">
-      <div>
-        <h2 id="dName" class="font-bold text-lg"></h2>
-        <p id="dSub" class="text-xs text-slate-500"></p>
+<div id="detail" class="hidden fixed inset-0 z-20 bg-slate-900/60 sm:p-4 overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-6xl sm:mx-auto sm:rounded-2xl shadow-xl min-h-screen sm:min-h-0 sm:my-2">
+    <div class="flex items-center gap-2 p-3 sm:p-4 border-b border-slate-200 sticky top-0 bg-white z-10 sm:rounded-t-2xl">
+      <div class="min-w-0">
+        <h2 id="dName" class="font-bold text-base sm:text-lg truncate"></h2>
+        <p id="dSub" class="text-xs text-slate-500 truncate"></p>
       </div>
-      <div class="ml-auto flex items-center gap-2">
-        <button id="dEdit" class="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1">Rename / group</button>
-        <button id="dRemove" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-2 py-1">Remove</button>
-        <button id="dClose" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      <div class="ml-auto flex items-center gap-1.5 shrink-0">
+        <button id="dEdit" class="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5">Rename</button>
+        <button id="dRemove" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-2 py-1.5">Remove</button>
+        <button id="dClose" class="text-slate-400 hover:text-slate-700 text-2xl leading-none w-8 h-8 grid place-items-center">&times;</button>
       </div>
     </div>
-    <div class="grid md:grid-cols-2 gap-4 p-4">
+    <div class="grid lg:grid-cols-2 gap-4 p-3 sm:p-4">
       <div>
         <img id="dShot" class="w-full rounded-lg border tile-shot">
         <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
@@ -84,27 +95,27 @@
         <div id="dHistory" class="grid grid-cols-4 gap-2"></div>
       </div>
       <div>
-        <div class="flex gap-4 border-b mb-2">
-          <button data-tab="act" class="dtab pb-2 text-sm font-semibold border-b-2 border-indigo-600">Activity</button>
-          <button data-tab="rep" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Today’s report</button>
-          <button data-tab="apps" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Apps</button>
-          <button data-tab="ctl" class="dtab pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Controls</button>
+        <div class="tabs scrollx flex gap-4 sm:gap-5 border-b border-slate-200 mb-2 overflow-x-auto">
+          <button data-tab="act" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-indigo-600">Activity</button>
+          <button data-tab="rep" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Today’s report</button>
+          <button data-tab="apps" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Apps</button>
+          <button data-tab="ctl" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Controls</button>
         </div>
-        <div id="dAct" class="text-sm max-h-[28rem] overflow-auto"></div>
-        <div id="dRep" class="hidden text-sm max-h-[28rem] overflow-auto"></div>
-        <div id="dApps" class="hidden text-sm max-h-[28rem] overflow-auto">
+        <div id="dAct" class="thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto"></div>
+        <div id="dRep" class="hidden thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto"></div>
+        <div id="dApps" class="hidden thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto">
           <p class="text-xs text-slate-500 mb-2">Running applications (updates while <b>Live view</b> is on). “Stop” closes it now and keeps it blocked.</p>
           <div id="appsList"></div>
         </div>
-        <div id="dCtl" class="hidden text-sm max-h-[28rem] overflow-auto pr-1">
-          <div class="flex flex-wrap gap-2 mb-4">
-            <button data-cmd="lock"     class="cbtn bg-slate-800 text-white rounded-lg px-3 py-1.5">Lock screen</button>
-            <button data-cmd="message"  class="cbtn bg-indigo-600 text-white rounded-lg px-3 py-1.5">Send message</button>
-            <button data-cmd="live"     class="cbtn bg-emerald-600 text-white rounded-lg px-3 py-1.5">Live view (2 min)</button>
-            <button data-cmd="record"   class="cbtn bg-rose-600 text-white rounded-lg px-3 py-1.5">Record (5 min)</button>
-            <button data-cmd="logoff"   class="cbtn bg-amber-600 text-white rounded-lg px-3 py-1.5">Log off</button>
-            <button data-cmd="restart"  class="cbtn bg-orange-600 text-white rounded-lg px-3 py-1.5">Restart</button>
-            <button data-cmd="shutdown" class="cbtn bg-red-600 text-white rounded-lg px-3 py-1.5">Shut down</button>
+        <div id="dCtl" class="hidden thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto pr-1">
+          <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mb-4">
+            <button data-cmd="live"     class="cbtn bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 font-medium">● Live view</button>
+            <button data-cmd="record"   class="cbtn bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-2 font-medium">⏺ Record</button>
+            <button data-cmd="message"  class="cbtn bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-medium">Message</button>
+            <button data-cmd="lock"     class="cbtn bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-3 py-2 font-medium">Lock</button>
+            <button data-cmd="logoff"   class="cbtn bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-2 font-medium">Log off</button>
+            <button data-cmd="restart"  class="cbtn bg-orange-600 hover:bg-orange-700 text-white rounded-lg px-3 py-2 font-medium">Restart</button>
+            <button data-cmd="shutdown" class="cbtn bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-2 font-medium col-span-2 sm:col-auto">Shut down</button>
           </div>
           <div class="bg-slate-50 rounded-lg p-3 mb-4">
             <h4 class="font-semibold mb-2">Restrictions</h4>
@@ -178,17 +189,21 @@ async function loadDevices() {
 }
 function tile(x) {
   const shot = x.last_shot ? `/api/admin/shot?p=${encodeURIComponent(x.last_shot)}` : '';
-  const dot  = x.online ? 'bg-emerald-500' : 'bg-slate-300';
   const name = esc(x.employee_name || x.hostname || ('PC #'+x.id));
-  const grp  = x.group_name ? `<span class="text-[10px] bg-slate-100 text-slate-500 rounded px-1 ml-1">${esc(x.group_name)}</span>` : '';
-  const act  = x.is_idle ? 'Idle' : esc(x.active_app || '—');
-  return `<div data-dev="${x.id}" class="bg-white rounded-xl shadow-sm hover:shadow-md cursor-pointer overflow-hidden border">
-    ${shot ? `<img src="${shot}" class="tile-shot w-full">` : `<div class="tile-shot w-full grid place-items-center text-slate-500 text-sm">No screenshot yet</div>`}
+  const grp  = x.group_name ? `<span class="text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 shrink-0">${esc(x.group_name)}</span>` : '';
+  const act  = x.is_idle ? '<span class="text-amber-600">Idle</span>' : esc(x.active_app || '—');
+  const pill = x.online
+    ? '<span class="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-500/90 text-white rounded-full px-2 py-0.5"><span class="w-1.5 h-1.5 rounded-full bg-white"></span>LIVE</span>'
+    : '<span class="text-[10px] font-semibold bg-slate-700/80 text-white rounded-full px-2 py-0.5">OFFLINE</span>';
+  return `<div data-dev="${x.id}" class="group bg-white rounded-xl shadow-sm hover:shadow-lg hover:ring-2 hover:ring-indigo-200 transition cursor-pointer overflow-hidden border border-slate-200">
+    <div class="relative">
+      ${shot ? `<img src="${shot}" class="tile-shot w-full group-hover:opacity-95">` : `<div class="tile-shot w-full grid place-items-center text-slate-400 text-sm">No screenshot yet</div>`}
+      <span class="absolute top-2 left-2">${pill}</span>
+    </div>
     <div class="p-3">
       <div class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full ${dot}"></span>
         <span class="font-semibold text-sm truncate">${name}</span>${grp}
-        <span class="ml-auto text-xs text-slate-400">${fmtAgo(x.ago)}</span>
+        <span class="ml-auto text-xs text-slate-400 shrink-0">${fmtAgo(x.ago)}</span>
       </div>
       <p class="text-xs text-slate-500 mt-1 truncate">${act}</p>
     </div></div>`;
