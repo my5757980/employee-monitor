@@ -51,6 +51,27 @@ def config_path():
     return os.path.join(d, "agent.json")
 
 
+def log_path():
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "EmployeeMonitor")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "agent.log")
+
+
+def log(*parts):
+    """Print and append to the agent's log file (the packaged exe has no console)."""
+    msg = " ".join(str(p) for p in parts)
+    try:
+        print(msg)
+    except Exception:
+        pass
+    try:
+        with open(log_path(), "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except Exception:
+        pass
+
+
 def load_config():
     try:
         with open(config_path(), encoding="utf-8") as f:
@@ -303,14 +324,14 @@ def main():
     if not cfg.get("device_token"):
         if not args.key:
             sys.exit("This PC is not enrolled. Run with --key <enrollment key>.")
-        print("Enrolling this computer...")
+        log("Enrolling this computer...")
         res = srv.enroll(args.key)
         cfg.update(server=base, device_token=res["device_token"], device_id=res.get("device_id"),
                    sample_seconds=res.get("sample_seconds", 60),
                    consent_notice=res.get("consent_notice", ""), consent_ack=0)
         save_config(cfg)
         srv.token = cfg["device_token"]
-        print("Enrolled as device #%s." % cfg.get("device_id"))
+        log("Enrolled as device #%s." % cfg.get("device_id"))
 
     # Show the monitoring notice once, then tell the server it was shown.
     if not cfg.get("consent_ack"):
@@ -324,7 +345,7 @@ def main():
     srv.token  = cfg["device_token"]
     next_sample = 0.0
     live_until  = 0.0
-    print("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
+    log("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
 
     while True:
         now = time.time()
@@ -360,9 +381,9 @@ def main():
                     data, size = take_screenshot()
                     srv.screenshot(data, size, now)
         except requests.RequestException as e:
-            print("network:", str(e)[:120])
+            log("network:", str(e)[:120])
         except Exception as e:
-            print("error:", str(e)[:160])
+            log("error:", str(e)[:160])
 
         if args.once:
             break
