@@ -29,6 +29,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
 
 import requests
 
@@ -173,6 +174,15 @@ class Server:
         self.base = base.rstrip("/")
         self.token = token
         self.s = requests.Session()
+        # Use the computer's own proxy settings (same as the browser). Many
+        # office networks only reach the internet through a proxy; without this
+        # the agent can't connect even though the browser can.
+        try:
+            proxies = urllib.request.getproxies()
+            if proxies:
+                self.s.proxies.update(proxies)
+        except Exception:
+            pass
 
     def _headers(self):
         return {"Authorization": "Bearer " + self.token} if self.token else {}
@@ -327,6 +337,19 @@ def enforce_blocked_sites(sites):
             _site_block_warned = True
 
 
+def enroll_and_save(srv, cfg, base, key):
+    """Enroll with the server and persist the new device token. Needs a key."""
+    log("Enrolling this computer...")
+    res = srv.enroll(key)
+    cfg.update(server=base, device_token=res["device_token"], device_id=res.get("device_id"),
+               sample_seconds=res.get("sample_seconds", 60),
+               consent_notice=res.get("consent_notice", ""), consent_ack=0)
+    save_config(cfg)
+    srv.token = cfg["device_token"]
+    log("Enrolled as device #%s." % cfg.get("device_id"))
+    return res
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", help="server base URL, e.g. https://monitor.example.com")
@@ -344,18 +367,26 @@ def main():
 
     srv = Server(base, cfg.get("device_token"))
 
-    # Enrol once.
-    if not cfg.get("device_token"):
+    # Enrol once - and re-enrol if this PC was last pointed at a different server
+    # (a saved device token only works on the server that issued it).
+    saved_server = (cfg.get("server") or "").rstrip("/")
+    server_changed = bool(cfg.get("device_token")) and saved_server != base.rstrip("/")
+    if server_changed:
+        log("Server changed (%s -> %s); re-enrolling." % (saved_server, base.rstrip("/")))
+        cfg["device_token"] = None
+        srv.token = None
+    # Enroll, retrying on any failure so a network blip or proxy hiccup is logged
+    # and recovered from instead of silently killing the agent.
+    while not cfg.get("device_token"):
         if not args.key:
             sys.exit("This PC is not enrolled. Run with --key <enrollment key>.")
-        log("Enrolling this computer...")
-        res = srv.enroll(args.key)
-        cfg.update(server=base, device_token=res["device_token"], device_id=res.get("device_id"),
-                   sample_seconds=res.get("sample_seconds", 60),
-                   consent_notice=res.get("consent_notice", ""), consent_ack=0)
-        save_config(cfg)
-        srv.token = cfg["device_token"]
-        log("Enrolled as device #%s." % cfg.get("device_id"))
+        try:
+            enroll_and_save(srv, cfg, base, args.key)
+        except Exception as e:
+            log("enroll failed:", str(e)[:180])
+            if args.once:
+                sys.exit("Enroll failed (see log).")
+            time.sleep(30)
 
     # Show the monitoring notice once, then tell the server it was shown.
     if not cfg.get("consent_ack"):
@@ -417,6 +448,22 @@ def main():
                 elif recording or (due and not idle):
                     data, size = take_screenshot()
                     srv.screenshot(data, size, now)
+        except requests.HTTPError as e:
+            code = e.response.status_code if e.response is not None else 0
+            if code == 401 and args.key:
+                # Our token was rejected (server reset, device removed, re-pointed).
+                # Heal automatically by enrolling again with the key.
+                log("Session rejected (401); re-enrolling.")
+                try:
+                    cfg["device_token"] = None
+                    srv.token = None
+                    enroll_and_save(srv, cfg, base, args.key)
+                    cfg["consent_ack"] = 1   # notice was already shown on this PC
+                    save_config(cfg)
+                except Exception as e2:
+                    log("re-enroll failed:", str(e2)[:120])
+            else:
+                log("network:", str(e)[:120])
         except requests.RequestException as e:
             log("network:", str(e)[:120])
         except Exception as e:
