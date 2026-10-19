@@ -412,32 +412,40 @@ def main():
     live_until   = 0.0
     record_until = 0.0
     last_procs   = 0.0
+    last_ping    = 0.0
     log("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
 
     while True:
         now = time.time()
         try:
-            info = srv.ping(cfg.get("consent_ack", 1))
-            if info.get("sample_seconds"):
-                interval = int(info["sample_seconds"])
-
-            # Actions the admin sent.
-            for cmd in info.get("commands", []):
-                ok, result = run_command(cmd)
-                if ok and cmd.get("type") == "live":
-                    live_until = now + int(cmd.get("payload") or 60)
-                if ok and cmd.get("type") == "record":
-                    record_until = now + int(cmd.get("payload") or 5) * 60
-                srv.command_result(cmd["id"], ok, result)
-
-            # What this computer may not run / open.
-            pol = info.get("policy", {})
-            enforce_blocked_apps(pol.get("blocked_apps", []))
-            enforce_blocked_sites(pol.get("blocked_sites", []))
-
             live      = now < live_until
             recording = now < record_until
-            due       = now >= next_sample
+            # Pick up commands/policy on a ping. While live we keep sending frames
+            # every loop, but only ping about once a second, so the frame rate isn't
+            # tied to the ping round-trip - this keeps the live view smooth.
+            if (not live) or (now - last_ping >= 1.0):
+                info = srv.ping(cfg.get("consent_ack", 1))
+                last_ping = now
+                if info.get("sample_seconds"):
+                    interval = int(info["sample_seconds"])
+
+                # Actions the admin sent.
+                for cmd in info.get("commands", []):
+                    ok, result = run_command(cmd)
+                    if ok and cmd.get("type") == "live":
+                        live_until = now + int(cmd.get("payload") or 60)
+                    if ok and cmd.get("type") == "record":
+                        record_until = now + int(cmd.get("payload") or 5) * 60
+                    srv.command_result(cmd["id"], ok, result)
+
+                # What this computer may not run / open.
+                pol = info.get("policy", {})
+                enforce_blocked_apps(pol.get("blocked_apps", []))
+                enforce_blocked_sites(pol.get("blocked_sites", []))
+                live      = now < live_until
+                recording = now < record_until
+
+            due = now >= next_sample
             if due or live or recording:
                 app, title = active_window()
                 idle = idle_seconds() > min(interval, 90)
@@ -447,10 +455,10 @@ def main():
                         "website": website_from(app, title), "is_idle": 1 if idle else 0,
                     })
                     next_sample = now + interval
-                # Live frames are smaller so they arrive quickly; a recording keeps
-                # full frames; the slow beat skips a still screen.
+                # Live frames are small so they arrive fast; a recording keeps full
+                # frames; the slow beat skips a still screen.
                 if live:
-                    data, size = take_screenshot(820, 35)
+                    data, size = take_screenshot(760, 32)
                     srv.screenshot(data, size, now)
                     if now - last_procs > 4:          # the running-apps list, while watching
                         srv.procs(running_apps())
@@ -481,9 +489,9 @@ def main():
 
         if args.once:
             break
-        # Almost live while the admin watches (1s), dense while recording (4s),
-        # otherwise just often enough to pick up actions.
-        time.sleep(1 if now < live_until else (4 if now < record_until else 2))
+        # Stream frames as fast as they upload while the admin watches, dense while
+        # recording (4s), otherwise just often enough to pick up actions (2s).
+        time.sleep(0.25 if now < live_until else (4 if now < record_until else 2))
 
 
 if __name__ == "__main__":
