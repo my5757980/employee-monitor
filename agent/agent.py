@@ -450,7 +450,7 @@ def main():
                 # Live frames are smaller so they arrive quickly; a recording keeps
                 # full frames; the slow beat skips a still screen.
                 if live:
-                    data, size = take_screenshot(1024, 45)
+                    data, size = take_screenshot(820, 35)
                     srv.screenshot(data, size, now)
                     if now - last_procs > 4:          # the running-apps list, while watching
                         srv.procs(running_apps())
@@ -483,7 +483,7 @@ def main():
             break
         # Almost live while the admin watches (1s), dense while recording (4s),
         # otherwise just often enough to pick up actions.
-        time.sleep(1 if now < live_until else (4 if now < record_until else max(3, min(interval, 10))))
+        time.sleep(1 if now < live_until else (4 if now < record_until else 2))
 
 
 if __name__ == "__main__":
