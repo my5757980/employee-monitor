@@ -348,7 +348,7 @@ setInterval(async () => {
       $('#dShotTs').textContent = 'Live: ' + d.screenshots[0].ts;
     }
   } catch (e) {}
-}, 1000);
+}, 500);
 
 const CONFIRM = { logoff:'Log this user off?', restart:'Restart this computer?', shutdown:'Shut this computer down?' };
 async function sendCommand(id, type) {
