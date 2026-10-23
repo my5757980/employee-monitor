@@ -160,6 +160,53 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true]);
     }
 
+    // A notice the agent was told to show (command type 'notice', payload = id).
+    // Only readable by a computer the notice was actually sent to.
+    if ($path === '/api/agent/notice' && $method === 'GET') {
+        $dev = require_device();
+        $nid = (int) ($_GET['id'] ?? 0);
+        if (!q1('SELECT id FROM commands WHERE device_id = ? AND type = ? AND payload = ?',
+                [$dev['id'], 'notice', (string) $nid])) {
+            fail('Not found.', 404);
+        }
+        $n = q1('SELECT body, image, voice FROM notices WHERE id = ?', [$nid]);
+        if (!$n) {
+            fail('Not found.', 404);
+        }
+        json_out(['ok' => true, 'body' => $n['body'],
+                  'image' => $n['image'] !== '', 'voice' => $n['voice'] !== '']);
+    }
+
+    // The picture or voice of a notice, streamed to the computer it was sent to.
+    if ($path === '/api/agent/notice-media' && $method === 'GET') {
+        $dev  = require_device();
+        $nid  = (int) ($_GET['id'] ?? 0);
+        $kind = $_GET['kind'] ?? '';
+        if (!in_array($kind, ['image', 'voice'], true)) {
+            fail('Bad kind.', 400);
+        }
+        if (!q1('SELECT id FROM commands WHERE device_id = ? AND type = ? AND payload = ?',
+                [$dev['id'], 'notice', (string) $nid])) {
+            fail('Not found.', 404);
+        }
+        $n = q1('SELECT image, voice FROM notices WHERE id = ?', [$nid]);
+        $file = $n ? ($kind === 'image' ? $n['image'] : $n['voice']) : '';
+        if ($file === '' || !preg_match('/^[\w.]+$/', $file)) {
+            fail('Not found.', 404);
+        }
+        $full = em_config()['data_dir'] . '/notices/' . $nid . '/' . $file;
+        if (!is_file($full)) {
+            fail('Not found.', 404);
+        }
+        $ext   = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $types = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif',
+                  'webp' => 'image/webp', 'wav' => 'audio/wav'];
+        header('Content-Type: ' . ($types[$ext] ?? 'application/octet-stream'));
+        header('Cache-Control: private, max-age=3600');
+        readfile($full);
+        exit;
+    }
+
     // ============ ADMIN API (the dashboard) ============
     if ($path === '/api/admin/login' && $method === 'POST') {
         $b    = body();
@@ -324,6 +371,85 @@ function route(string $path, string $method, array $cfg): void
             [$id, $type, mb_substr($b['payload'] ?? '', 0, 1000), $a['id']]);
         log_event($id, 'command', $type . ' ' . ($b['payload'] ?? ''));
         json_out(['ok' => true, 'command_id' => $cid]);
+    }
+
+    // Send a NOTICE (text + optional picture + optional voice) to one computer,
+    // several hand-picked computers, or all of them. The content is stored once
+    // and one 'notice' command is queued per computer. Multipart form:
+    //   body, scope (one|some|all), device_ids (csv, for one/some), image, voice.
+    if ($path === '/api/admin/notice' && $method === 'POST') {
+        $a     = require_admin();
+        $text  = mb_substr(trim((string) ($_POST['body'] ?? '')), 0, 2000);
+        $scope = in_array($_POST['scope'] ?? '', ['one', 'some', 'all'], true) ? $_POST['scope'] : 'one';
+
+        // Who it goes to - only computers that still exist and are active.
+        if ($scope === 'all') {
+            $targets = array_map(fn ($r) => (int) $r['id'], q('SELECT id FROM devices WHERE active = 1'));
+        } else {
+            $raw = $_POST['device_ids'] ?? '';
+            $raw = is_array($raw) ? $raw : explode(',', (string) $raw);
+            $ids = array_values(array_unique(array_filter(array_map('intval', $raw))));
+            if (!$ids) {
+                fail('Choose at least one computer.', 400);
+            }
+            $in      = implode(',', array_fill(0, count($ids), '?'));
+            $targets = array_map(fn ($r) => (int) $r['id'],
+                q("SELECT id FROM devices WHERE active = 1 AND id IN ($in)", $ids));
+        }
+        if (!$targets) {
+            fail('No computers to send to.', 400);
+        }
+        $hasImg = !empty($_FILES['image']['tmp_name']) && is_uploaded_file($_FILES['image']['tmp_name']);
+        $hasVoc = !empty($_FILES['voice']['tmp_name']) && is_uploaded_file($_FILES['voice']['tmp_name']);
+        if ($text === '' && !$hasImg && !$hasVoc) {
+            fail('Write a message, or add a picture or voice.', 400);
+        }
+
+        $nid = x('INSERT INTO notices (body, scope, recipients, created_by) VALUES (?,?,?,?)',
+            [$text, $scope, count($targets), $a['id']]);
+        $dir = em_config()['data_dir'] . '/notices/' . $nid;
+        @mkdir($dir, 0775, true);
+
+        $image = '';
+        if ($hasImg) {
+            if ((int) ($_FILES['image']['size'] ?? 0) > 6 * 1024 * 1024) {
+                fail('The picture is too large (max 6 MB).', 400);
+            }
+            $info = @getimagesize($_FILES['image']['tmp_name']);
+            $ext  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
+                     'image/webp' => 'webp'][$info['mime'] ?? ''] ?? '';
+            if (!$ext) {
+                fail('That picture type is not supported (use JPG, PNG, GIF or WebP).', 400);
+            }
+            $image = 'image.' . $ext;
+            if (!move_uploaded_file($_FILES['image']['tmp_name'], $dir . '/' . $image)) {
+                fail('Could not store the picture.', 500);
+            }
+        }
+        $voice = '';
+        if ($hasVoc) {
+            if ((int) ($_FILES['voice']['size'] ?? 0) > 12 * 1024 * 1024) {
+                fail('The voice clip is too large (max 12 MB).', 400);
+            }
+            $head = (string) file_get_contents($_FILES['voice']['tmp_name'], false, null, 0, 12);
+            if (substr($head, 0, 4) !== 'RIFF' || substr($head, 8, 4) !== 'WAVE') {
+                fail('The voice clip must be a WAV recording.', 400);
+            }
+            $voice = 'voice.wav';
+            if (!move_uploaded_file($_FILES['voice']['tmp_name'], $dir . '/' . $voice)) {
+                fail('Could not store the voice clip.', 500);
+            }
+        }
+        if ($image !== '' || $voice !== '') {
+            x('UPDATE notices SET image = ?, voice = ? WHERE id = ?', [$image, $voice, $nid]);
+        }
+
+        foreach ($targets as $did) {
+            x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
+                [$did, 'notice', (string) $nid, $a['id']]);
+        }
+        log_event(null, 'notice', 'sent #' . $nid . ' to ' . count($targets) . ' computer(s) [' . $scope . ']');
+        json_out(['ok' => true, 'notice_id' => $nid, 'sent' => count($targets)]);
     }
 
     // The recent actions sent to a computer, with their outcome.

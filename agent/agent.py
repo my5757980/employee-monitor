@@ -28,6 +28,8 @@ import re
 import socket
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import urllib.request
 
@@ -109,6 +111,69 @@ def show_notice(text, dialog=True):
         except Exception:
             pass
     print("\n*** " + text + " ***\n")
+    return True
+
+
+# ----- a richer notice from the owner: text + picture on screen, voice plays -----
+def show_notice_rich(body, image_path=None, voice_path=None):
+    """A visible, dismissable announcement from the owner - the same disclosed
+    notice as the Message button, now with an optional picture shown and a voice
+    clip played. Runs in its own thread so monitoring keeps going; falls back to
+    a plain message box where there is no screen (a service/test session)."""
+    def _run():
+        if voice_path:
+            try:
+                import winsound
+                winsound.PlaySound(voice_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            except Exception:
+                try:
+                    os.startfile(voice_path)       # no WAV support -> the default player
+                except Exception:
+                    pass
+        try:
+            import tkinter as tk
+            win = tk.Tk()
+            win.title("Message from your administrator")
+            win.attributes("-topmost", True)
+            frm = tk.Frame(win, padx=20, pady=18)
+            frm.pack(fill="both", expand=True)
+            tk.Label(frm, text="Message from your administrator",
+                     font=("Segoe UI", 13, "bold"), fg="#1d4ed8").pack(anchor="w")
+            if body:
+                tk.Label(frm, text=body, font=("Segoe UI", 11), wraplength=540,
+                         justify="left").pack(anchor="w", pady=(10, 0))
+            if image_path:
+                try:
+                    from PIL import Image, ImageTk
+                    im = Image.open(image_path)
+                    im.thumbnail((560, 420))
+                    photo = ImageTk.PhotoImage(im)
+                    lbl = tk.Label(frm, image=photo)
+                    lbl.image = photo                # keep a reference so it is not garbage-collected
+                    lbl.pack(pady=(12, 0))
+                except Exception:
+                    pass
+
+            def close():
+                try:
+                    import winsound
+                    winsound.PlaySound(None, winsound.SND_PURGE)   # stop the voice
+                except Exception:
+                    pass
+                win.destroy()
+
+            tk.Button(frm, text="Close", command=close, padx=18, pady=5,
+                      font=("Segoe UI", 10)).pack(pady=(16, 0))
+            win.update_idletasks()
+            w, h = win.winfo_width(), win.winfo_height()
+            sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+            win.geometry("+%d+%d" % (max(0, (sw - w) // 2), max(0, (sh - h) // 3)))
+            win.mainloop()
+        except Exception:
+            show_notice("Message from your administrator:\n\n"
+                        + (body or "(a picture or voice was sent)"), dialog=not NO_DIALOG)
+
+    threading.Thread(target=_run, daemon=True).start()
     return True
 
 
@@ -241,15 +306,41 @@ class Server:
         r.raise_for_status()
         return r.json()
 
+    def get_json(self, path):
+        r = self.s.get(self.base + path, timeout=30, headers=self._headers())
+        r.raise_for_status()
+        return r.json()
+
+    def download(self, path, suffix=""):
+        """Fetch a file (a notice's picture or voice) to a temp file; return its path."""
+        r = self.s.get(self.base + path, timeout=60, headers=self._headers())
+        r.raise_for_status()
+        fd, dest = tempfile.mkstemp(prefix="emnotice_", suffix=suffix)
+        with os.fdopen(fd, "wb") as f:
+            f.write(r.content)
+        return dest
+
 
 # ----- actions the admin can send -----
-def run_command(cmd):
+def run_command(cmd, srv=None):
     """Returns (ok, result_text). 'live' is handled by the caller (timing)."""
     t = cmd.get("type")
     payload = cmd.get("payload") or ""
     try:
         if t == "message":
             show_notice("Message from your administrator:\n\n" + payload, dialog=not NO_DIALOG)
+            return True, "shown"
+        if t == "notice":
+            if srv is None:
+                return False, "no server"
+            try:
+                nid  = int(payload or 0)
+                meta = srv.get_json("/api/agent/notice?id=%d" % nid)
+            except Exception as e:
+                return False, "fetch failed: " + str(e)[:80]
+            image = srv.download("/api/agent/notice-media?id=%d&kind=image" % nid, ".img") if meta.get("image") else None
+            voice = srv.download("/api/agent/notice-media?id=%d&kind=voice" % nid, ".wav") if meta.get("voice") else None
+            show_notice_rich(meta.get("body") or "", image, voice)
             return True, "shown"
         if t == "lock":
             if IS_WIN:
@@ -431,7 +522,7 @@ def main():
 
                 # Actions the admin sent.
                 for cmd in info.get("commands", []):
-                    ok, result = run_command(cmd)
+                    ok, result = run_command(cmd, srv)
                     if ok and cmd.get("type") == "live":
                         live_until = now + int(cmd.get("payload") or 60)
                     if ok and cmd.get("type") == "record":

@@ -111,7 +111,7 @@
           <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mb-4">
             <button data-cmd="live"     class="cbtn bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 font-medium">● Live view</button>
             <button data-cmd="record"   class="cbtn bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-2 font-medium">⏺ Record</button>
-            <button data-cmd="message"  class="cbtn bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-medium">Message</button>
+            <button data-cmd="message"  class="cbtn bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-medium">Send notice</button>
             <button data-cmd="lock"     class="cbtn bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-3 py-2 font-medium">Lock</button>
             <button data-cmd="logoff"   class="cbtn bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-2 font-medium">Log off</button>
             <button data-cmd="restart"  class="cbtn bg-orange-600 hover:bg-orange-700 text-white rounded-lg px-3 py-2 font-medium">Restart</button>
@@ -150,6 +150,48 @@
       </div>
     </div>
     <button id="addClose" class="w-full text-slate-500 hover:text-slate-800 text-sm mt-4">Close</button>
+  </div>
+</div>
+
+<!-- Send a notice: text + voice + picture, to one / several / all computers -->
+<div id="noticeModal" class="hidden fixed inset-0 z-30 bg-black/50 p-4 grid place-items-center overflow-y-auto">
+  <div class="bg-white w-full max-w-lg rounded-2xl shadow-lg p-6 my-6">
+    <h2 class="font-bold text-lg mb-1">Send a notice</h2>
+    <p class="text-sm text-slate-500 mb-4">Shown on the employee’s screen as a visible message. Add a voice note or a picture, and choose who it goes to.</p>
+
+    <label class="block text-xs font-semibold text-slate-600 mb-1">Message</label>
+    <textarea id="ntBody" rows="3" class="w-full border rounded-lg px-3 py-2 mb-3" placeholder="e.g. Team meeting at 4 PM in the main hall."></textarea>
+
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div class="bg-slate-50 rounded-lg p-3">
+        <div class="text-xs font-semibold text-slate-600 mb-2">Voice (optional)</div>
+        <div class="flex items-center gap-2">
+          <button id="ntRec" type="button" class="bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-1.5 text-sm">● Record</button>
+          <button id="ntRecClear" type="button" class="hidden text-slate-500 hover:text-slate-800 text-sm">Clear</button>
+        </div>
+        <div id="ntRecMsg" class="text-xs text-slate-500 mt-2">Not recorded</div>
+        <audio id="ntRecPlay" class="hidden mt-2 w-full" controls></audio>
+      </div>
+      <div class="bg-slate-50 rounded-lg p-3">
+        <div class="text-xs font-semibold text-slate-600 mb-2">Picture (optional)</div>
+        <input id="ntImg" type="file" accept="image/*" class="block w-full text-xs">
+        <img id="ntImgPrev" class="hidden mt-2 rounded border max-h-24">
+      </div>
+    </div>
+
+    <div class="bg-slate-50 rounded-lg p-3 mb-4">
+      <div class="text-xs font-semibold text-slate-600 mb-2">Send to</div>
+      <label class="flex items-center gap-2 text-sm mb-1"><input type="radio" name="ntScope" value="one" checked> This computer (<span id="ntOneName">—</span>)</label>
+      <label class="flex items-center gap-2 text-sm mb-1"><input type="radio" name="ntScope" value="some"> Choose computers</label>
+      <div id="ntPick" class="hidden max-h-40 overflow-auto border rounded-lg bg-white p-2 ml-6 my-1"></div>
+      <label class="flex items-center gap-2 text-sm"><input type="radio" name="ntScope" value="all"> All computers</label>
+    </div>
+
+    <div id="ntMsg" class="hidden text-sm mb-3"></div>
+    <div class="flex gap-2">
+      <button id="ntSend" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 font-semibold">Send</button>
+      <button id="ntClose" class="px-4 text-slate-500 hover:text-slate-800 text-sm">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -353,7 +395,7 @@ setInterval(async () => {
 const CONFIRM = { logoff:'Log this user off?', restart:'Restart this computer?', shutdown:'Shut this computer down?' };
 async function sendCommand(id, type) {
   let payload = '';
-  if (type === 'message') { payload = prompt('Message to show on the employee’s screen:'); if (payload === null || payload === '') return; }
+  if (type === 'message') { openNotice(id); return; }   // the notice composer (text + voice + picture, 1 / some / all)
   else if (type === 'live') { payload = '120'; }
   else if (type === 'record') { payload = '5'; }
   else if (CONFIRM[type] && !confirm(CONFIRM[type])) return;
@@ -404,6 +446,110 @@ $('#addMake').addEventListener('click', async () => {
   $('#addKey').textContent = d.enroll_key; $('#addResult').classList.remove('hidden');
 });
 $('#addCopy').addEventListener('click', () => navigator.clipboard.writeText($('#addKey').textContent));
+
+// ---- send a notice (text + voice + picture) to one / several / all computers ----
+let ntDeviceId = 0, ntVoiceBlob = null;
+let ntStream = null, ntCtx = null, ntNode = null, ntSrc = null, ntChunks = [], ntRecording = false;
+
+function ntSetMsg(t, bad) {
+  const m = $('#ntMsg'); m.textContent = t;
+  m.className = 'text-sm mb-3 ' + (bad ? 'text-red-600' : 'text-emerald-600');
+  m.classList.remove('hidden');
+}
+
+async function openNotice(id) {
+  ntDeviceId = Number(id);
+  $('#ntBody').value = ''; ntVoiceBlob = null;
+  $('#ntRecMsg').textContent = 'Not recorded';
+  $('#ntRecPlay').classList.add('hidden'); $('#ntRecClear').classList.add('hidden');
+  $('#ntRec').textContent = '● Record'; $('#ntRec').classList.remove('bg-slate-700'); $('#ntRec').classList.add('bg-rose-600');
+  $('#ntImg').value = ''; $('#ntImgPrev').classList.add('hidden');
+  $('#ntMsg').classList.add('hidden');
+  document.querySelector('input[name=ntScope][value=one]').checked = true;
+  $('#ntPick').classList.add('hidden');
+  try {
+    const { devices } = await api('/api/admin/devices');
+    const me = devices.find(x => Number(x.id) === ntDeviceId);
+    $('#ntOneName').textContent = me ? (me.employee_name || me.hostname || ('PC #' + me.id)) : ('PC #' + id);
+    $('#ntPick').innerHTML = devices.map(x => {
+      const nm = esc(x.employee_name || x.hostname || ('PC #' + x.id));
+      return `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="ntDev" value="${x.id}" ${Number(x.id) === ntDeviceId ? 'checked' : ''}> ${nm}</label>`;
+    }).join('') || '<span class="text-xs text-slate-400">No computers.</span>';
+  } catch (e) { $('#ntOneName').textContent = 'PC #' + id; }
+  $('#noticeModal').classList.remove('hidden');
+}
+
+// Record the owner's voice as a WAV the agent can play with no extra software.
+async function ntStartRec() {
+  try { ntStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { ntSetMsg('Microphone not available: ' + e.message, true); return; }
+  ntCtx = new (window.AudioContext || window.webkitAudioContext)();
+  ntSrc = ntCtx.createMediaStreamSource(ntStream);
+  ntNode = ntCtx.createScriptProcessor(4096, 1, 1);
+  ntChunks = [];
+  ntNode.onaudioprocess = (e) => { if (ntRecording) ntChunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+  ntSrc.connect(ntNode); ntNode.connect(ntCtx.destination);   // output stays silent (we never write it)
+  ntRecording = true;
+  $('#ntRec').textContent = '■ Stop'; $('#ntRec').classList.replace('bg-rose-600', 'bg-slate-700');
+  $('#ntRecMsg').textContent = 'Recording…';
+}
+function ntStopRec() {
+  ntRecording = false;
+  const rate = ntCtx ? ntCtx.sampleRate : 44100;
+  try { ntNode.disconnect(); ntSrc.disconnect(); } catch (e) {}
+  try { ntStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  try { ntCtx.close(); } catch (e) {}
+  let len = ntChunks.reduce((a, c) => a + c.length, 0), data = new Float32Array(len), off = 0;
+  ntChunks.forEach(c => { data.set(c, off); off += c.length; });
+  ntVoiceBlob = ntEncodeWav(data, rate);
+  $('#ntRec').textContent = '● Re-record'; $('#ntRec').classList.replace('bg-slate-700', 'bg-rose-600');
+  $('#ntRecMsg').textContent = 'Recorded ' + (len / rate).toFixed(1) + 's';
+  $('#ntRecClear').classList.remove('hidden');
+  const pl = $('#ntRecPlay'); pl.src = URL.createObjectURL(ntVoiceBlob); pl.classList.remove('hidden');
+}
+function ntEncodeWav(samples, rate) {
+  const buf = new ArrayBuffer(44 + samples.length * 2), view = new DataView(buf);
+  const wr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  wr(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true); wr(8, 'WAVE'); wr(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  wr(36, 'data'); view.setUint32(40, samples.length * 2, true);
+  let o = 44; for (let i = 0; i < samples.length; i++) { let s = Math.max(-1, Math.min(1, samples[i])); view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); o += 2; }
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+async function sendNotice() {
+  const scope = document.querySelector('input[name=ntScope]:checked').value;
+  const img = $('#ntImg').files[0];
+  if (!$('#ntBody').value.trim() && !ntVoiceBlob && !img) { ntSetMsg('Write a message, or add a picture or voice.', true); return; }
+  const fd = new FormData();
+  fd.append('body', $('#ntBody').value);
+  fd.append('scope', scope);
+  if (scope === 'one') fd.append('device_ids', String(ntDeviceId));
+  else if (scope === 'some') {
+    const ids = [...document.querySelectorAll('.ntDev:checked')].map(c => c.value);
+    if (!ids.length) { ntSetMsg('Choose at least one computer.', true); return; }
+    fd.append('device_ids', ids.join(','));
+  }
+  if (ntVoiceBlob) fd.append('voice', ntVoiceBlob, 'voice.wav');
+  if (img) fd.append('image', img, img.name);
+  $('#ntSend').disabled = true; $('#ntSend').textContent = 'Sending…';
+  try {
+    const r = await api('/api/admin/notice', { method: 'POST', body: fd });
+    ntSetMsg('Sent to ' + r.sent + ' computer' + (r.sent === 1 ? '' : 's') + '.', false);
+    const open = $('#detail').getAttribute('data-id');
+    setTimeout(() => { $('#noticeModal').classList.add('hidden'); if (open) loadCommands(open); }, 1200);
+  } catch (e) { ntSetMsg(e.message || 'Could not send.', true); }
+  $('#ntSend').disabled = false; $('#ntSend').textContent = 'Send';
+}
+
+$('#ntRec').addEventListener('click', () => ntRecording ? ntStopRec() : ntStartRec());
+$('#ntRecClear').addEventListener('click', () => { ntVoiceBlob = null; $('#ntRecMsg').textContent = 'Not recorded'; $('#ntRecPlay').classList.add('hidden'); $('#ntRecClear').classList.add('hidden'); });
+$('#ntImg').addEventListener('change', () => { const f = $('#ntImg').files[0]; if (f) { $('#ntImgPrev').src = URL.createObjectURL(f); $('#ntImgPrev').classList.remove('hidden'); } });
+document.querySelectorAll('input[name=ntScope]').forEach(r => r.addEventListener('change', () =>
+  $('#ntPick').classList.toggle('hidden', document.querySelector('input[name=ntScope]:checked').value !== 'some')));
+$('#ntSend').addEventListener('click', sendNotice);
+$('#ntClose').addEventListener('click', () => { if (ntRecording) ntStopRec(); $('#noticeModal').classList.add('hidden'); });
 
 // ---- boot ----
 async function start() {

@@ -88,6 +88,23 @@ CREATE TABLE IF NOT EXISTS commands (
   KEY (device_id, status)
 );
 
+-- A notice the owner sends to one, several, or all computers: a short message
+-- with an optional picture and an optional voice clip. The content is kept here
+-- ONCE; one row is added to `commands` (type 'notice', payload = this notice id)
+-- for each computer it goes to, so the picture and voice are never duplicated.
+-- The employee sees a plain, visible window with the text + picture and the
+-- voice plays - the same disclosed notice the "Message" button already shows.
+CREATE TABLE IF NOT EXISTS notices (
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  body       VARCHAR(2000) NOT NULL DEFAULT '',
+  image      VARCHAR(64)   NOT NULL DEFAULT '',    -- file under data_dir/notices/<id>/, '' if none
+  voice      VARCHAR(64)   NOT NULL DEFAULT '',    -- a .wav the agent plays, '' if none
+  scope      VARCHAR(8)    NOT NULL DEFAULT 'one', -- one | some | all (kept for the record)
+  recipients INT           NOT NULL DEFAULT 0,
+  created_by INT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- What a computer is not allowed to run or open (one row per device).
 CREATE TABLE IF NOT EXISTS policies (
   device_id     INT PRIMARY KEY,

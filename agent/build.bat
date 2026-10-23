@@ -6,7 +6,8 @@ REM Output: dist\EmployeeMonitorAgent.exe
 
 cd /d "%~dp0"
 pyinstaller --onefile --noconsole --name EmployeeMonitorAgent ^
-  --hidden-import mss --hidden-import PIL --hidden-import psutil ^
+  --hidden-import mss --hidden-import PIL --hidden-import PIL.ImageTk --hidden-import psutil ^
+  --hidden-import tkinter --hidden-import winsound ^
   agent.py
 echo.
 echo Built: %~dp0dist\EmployeeMonitorAgent.exe
