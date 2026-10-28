@@ -1,19 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
-
-datas = []
-binaries = []
-hiddenimports = ['mss', 'PIL', 'psutil']
-tmp_ret = collect_all('truststore')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['agent.py'],
+    ['E:/New folder/employee-monitor/agent/agent.py'],
     pathex=[],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=[],
+    datas=[],
+    hiddenimports=['mss', 'PIL', 'PIL.ImageTk', 'psutil', 'tkinter', 'winsound'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -10,6 +10,12 @@
   html, body { overflow-x: hidden; }
   body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   .tile-shot { aspect-ratio: 16/10; object-fit: cover; background:#0f172a; }
+  .live-shot { width:100%; max-height:74vh; min-height:300px; object-fit:contain; background:#0f172a; display:block; border-radius:.5rem; }
+  @media (min-width:1024px){ .detail-split { grid-template-columns: minmax(0,1.95fr) minmax(0,1fr); } }
+  #liveFs { position:fixed; inset:0; background:#000; z-index:70; display:none; }
+  #liveFs.on { display:grid; place-items:center; }
+  #liveFs img { max-width:100vw; max-height:100vh; object-fit:contain; }
+  #liveFs .fsclose { position:fixed; top:12px; right:18px; color:#fff; font-size:34px; line-height:1; cursor:pointer; opacity:.85; z-index:71; }
   input[type=range] { accent-color:#4f46e5; }
   .scrollx::-webkit-scrollbar { height: 0; }
   .thin::-webkit-scrollbar { width: 7px; height: 7px; }
@@ -45,6 +51,9 @@
         <p id="counts" class="text-xs text-slate-500 leading-tight truncate"></p>
       </div>
       <div class="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <button id="camBtn" class="text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-2.5 sm:px-3 py-1.5 font-semibold" title="Open the office cameras">
+          <span class="sm:hidden">📹</span><span class="hidden sm:inline">📹 Cameras</span>
+        </button>
         <button id="addBtn" class="text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-2.5 sm:px-3 py-1.5 font-semibold">
           <span class="sm:hidden">+ Add</span><span class="hidden sm:inline">+ Add computer</span>
         </button>
@@ -78,9 +87,12 @@
         <button id="dClose" class="text-slate-400 hover:text-slate-700 text-2xl leading-none w-8 h-8 grid place-items-center">&times;</button>
       </div>
     </div>
-    <div class="grid lg:grid-cols-2 gap-4 p-3 sm:p-4">
+    <div class="grid detail-split gap-4 p-3 sm:p-4">
       <div>
-        <img id="dShot" class="w-full rounded-lg border tile-shot">
+        <div class="relative">
+          <img id="dShot" class="live-shot w-full border">
+          <button id="dFs" title="Fullscreen" class="absolute top-2 right-2 bg-black/55 hover:bg-black/80 text-white rounded-lg px-3 py-1.5 text-sm font-medium">⛶ Fullscreen</button>
+        </div>
         <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
         <div class="mt-4 bg-slate-50 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-2">
@@ -195,6 +207,24 @@
   </div>
 </div>
 
+<!-- Cameras: opens the office camera system's OWN web page (e.g. Guarding Vision
+     or the DVR). This dashboard does not restream or store any camera video. -->
+<div id="camModal" class="hidden fixed inset-0 z-30 bg-black/50 p-4 grid place-items-center">
+  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-6">
+    <h2 class="font-bold text-lg mb-1">Office cameras</h2>
+    <p class="text-sm text-slate-500 mb-4">Opens your camera system’s own web page (Guarding Vision, or the DVR’s web page) in a new tab — the same cameras you watch on the phone app. Paste the address once; after that the button opens it directly.</p>
+    <label class="block text-xs font-semibold text-slate-600 mb-1">Cameras web address</label>
+    <input id="camUrl" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="https://… (Guarding Vision / DVR page)">
+    <div class="flex gap-2">
+      <button id="camOpen" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg py-2 font-semibold">Open cameras</button>
+      <button id="camSave" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 font-semibold">Save</button>
+    </div>
+    <p id="camMsg" class="text-sm mt-3 hidden"></p>
+    <button id="camClose" class="w-full text-slate-500 hover:text-slate-800 text-sm mt-3">Close</button>
+  </div>
+</div>
+
+<div id="liveFs"><span class="fsclose">&times;</span><img id="liveFsImg"></div>
 <script>
 const $ = (s) => document.querySelector(s);
 async function api(path, opts = {}) {
@@ -312,6 +342,8 @@ $('#playBtn').addEventListener('click', () => {
 });
 
 $('#dClose').addEventListener('click', () => { stopPlay(); $('#detail').classList.add('hidden'); });
+$('#dFs').addEventListener('click', () => { $('#liveFsImg').src = $('#dShot').src; $('#liveFs').classList.add('on'); });
+$('#liveFs').addEventListener('click', () => $('#liveFs').classList.remove('on'));
 $('#dEdit').addEventListener('click', async () => {
   const id = $('#detail').getAttribute('data-id');
   const name = prompt('Name for this computer / employee:', $('#dName').textContent);
@@ -387,6 +419,7 @@ setInterval(async () => {
     const { device: d } = await api('/api/admin/device?id=' + id);
     if (d.screenshots && d.screenshots.length) {
       $('#dShot').src = '/api/admin/shot?p=' + encodeURIComponent(d.screenshots[0].path) + '&t=' + Date.now();
+      if ($('#liveFs').classList.contains('on')) $('#liveFsImg').src = $('#dShot').src;
       $('#dShotTs').textContent = 'Live: ' + d.screenshots[0].ts;
     }
   } catch (e) {}
@@ -446,6 +479,32 @@ $('#addMake').addEventListener('click', async () => {
   $('#addKey').textContent = d.enroll_key; $('#addResult').classList.remove('hidden');
 });
 $('#addCopy').addEventListener('click', () => navigator.clipboard.writeText($('#addKey').textContent));
+
+// ---- cameras: open the office camera system's OWN web page (no restreaming) ----
+function camSetMsg(t, bad) { const m = $('#camMsg'); m.textContent = t; m.className = 'text-sm mt-3 ' + (bad ? 'text-red-600' : 'text-emerald-600'); m.classList.remove('hidden'); }
+$('#camBtn').addEventListener('click', async () => {
+  let url = '';
+  try { const d = await api('/api/admin/cameras'); url = d.url || ''; } catch (e) {}
+  $('#camUrl').value = url;
+  $('#camMsg').classList.add('hidden');
+  $('#camModal').classList.remove('hidden');
+});
+$('#camClose').addEventListener('click', () => $('#camModal').classList.add('hidden'));
+async function camSave() {
+  const url = $('#camUrl').value.trim();
+  const d = await api('/api/admin/cameras', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url }) });
+  return d.url;
+}
+$('#camSave').addEventListener('click', async () => {
+  try { await camSave(); camSetMsg('Saved.', false); } catch (e) { camSetMsg(e.message || 'Could not save.', true); }
+});
+$('#camOpen').addEventListener('click', async () => {
+  const url = $('#camUrl').value.trim();
+  if (!url) { camSetMsg('Paste the cameras web address first.', true); return; }
+  try { await camSave(); } catch (e) { camSetMsg(e.message || 'Could not save.', true); return; }
+  window.open(url, '_blank', 'noopener');
+  $('#camModal').classList.add('hidden');
+});
 
 // ---- send a notice (text + voice + picture) to one / several / all computers ----
 let ntDeviceId = 0, ntVoiceBlob = null;

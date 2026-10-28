@@ -550,6 +550,28 @@ function route(string $path, string $method, array $cfg): void
         exit;
     }
 
+    // The office cameras' own web page (e.g. Guarding Vision portal or the DVR's
+    // web page). We only store/return that address; the dashboard "Cameras" button
+    // opens it in a new tab. No camera video is streamed or stored by this server.
+    if ($path === '/api/admin/cameras' && $method === 'GET') {
+        require_admin();
+        $row = q1("SELECT sval FROM settings WHERE skey = 'cameras_url'");
+        json_out(['ok' => true, 'url' => $row['sval'] ?? '']);
+    }
+    if ($path === '/api/admin/cameras' && $method === 'POST') {
+        require_admin();
+        $b   = body();
+        $url = trim($b['url'] ?? '');
+        if ($url !== '' && !preg_match('#^https?://#i', $url)) {
+            fail('Enter a web address that starts with http:// or https://', 400);
+        }
+        $url = mb_substr($url, 0, 500);
+        x("INSERT INTO settings (skey, sval) VALUES ('cameras_url', ?)
+           ON DUPLICATE KEY UPDATE sval = VALUES(sval)", [$url]);
+        log_event(null, 'cameras', $url === '' ? 'link cleared' : 'link set');
+        json_out(['ok' => true, 'url' => $url]);
+    }
+
     // ============ Dashboard (everything else) ============
     if ($path === '/' || $path === '/index.html') {
         header('Content-Type: text/html; charset=utf-8');

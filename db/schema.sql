@@ -130,3 +130,13 @@ CREATE TABLE IF NOT EXISTS events (
   detail    VARCHAR(512) NOT NULL DEFAULT '',
   KEY (device_id, ts)
 );
+
+-- Small dashboard key/value settings. First use: 'cameras_url' - the web address
+-- of the office's OWN camera system (e.g. Guarding Vision portal or the DVR's own
+-- web page). The "Cameras" button just OPENS that page in a new tab; this software
+-- does not restream or store any camera video.
+CREATE TABLE IF NOT EXISTS settings (
+  skey       VARCHAR(64) PRIMARY KEY,
+  sval       TEXT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
