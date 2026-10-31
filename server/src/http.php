@@ -50,13 +50,20 @@ function require_admin(): array
         fail('Please sign in.', 401);
     }
     $row = q1(
-        'SELECT a.* FROM admin_sessions s JOIN admins a ON a.id = s.admin_id WHERE s.token = ?',
+        'SELECT a.*, UNIX_TIMESTAMP(s.last_seen) AS sess_seen
+         FROM admin_sessions s JOIN admins a ON a.id = s.admin_id WHERE s.token = ?',
         [$tok]
     );
     if (!$row) {
         fail('Please sign in.', 401);
     }
-    x('UPDATE admin_sessions SET last_seen = NOW() WHERE token = ?', [$tok]);
+    // The dashboard fires many small requests (every screenshot, the 1s live poll).
+    // Only touch the session clock once a minute, so images and polls don't each
+    // cost a database write.
+    if ((time() - (int) $row['sess_seen']) > 60) {
+        x('UPDATE admin_sessions SET last_seen = NOW() WHERE token = ?', [$tok]);
+    }
+    unset($row['sess_seen']);
     return $row;
 }
 
@@ -118,4 +125,36 @@ function lines(?string $text): array
 function log_event(?int $deviceId, string $type, string $detail = ''): void
 {
     x('INSERT INTO events (device_id, type, detail) VALUES (?,?,?)', [$deviceId, $type, mb_substr($detail, 0, 500)]);
+}
+
+/** Make a width-capped JPEG copy of a screenshot for fast thumbnails and live
+ * frames (needs GD). The copy is cached next to the original, so each size is
+ * built once. Returns the file written, the original if it is already small
+ * enough, or '' if GD is missing or the source is unreadable (caller then serves
+ * the full image). */
+function em_make_thumb(string $src, string $dst, int $w): string
+{
+    if (!function_exists('imagecreatefromjpeg')) {
+        return '';
+    }
+    $info = @getimagesize($src);
+    if (!$info || empty($info[0]) || empty($info[1])) {
+        return '';
+    }
+    [$sw, $sh] = $info;
+    if ($sw <= $w) {                 // already small enough - reuse the original
+        return $src;
+    }
+    $nw = $w;
+    $nh = max(1, (int) round($sh * $w / $sw));
+    $im = @imagecreatefromjpeg($src);
+    if (!$im) {
+        return '';
+    }
+    $t = imagecreatetruecolor($nw, $nh);
+    imagecopyresampled($t, $im, 0, 0, 0, 0, $nw, $nh, $sw, $sh);
+    $ok = @imagejpeg($t, $dst, 72);
+    imagedestroy($t);
+    imagedestroy($im);
+    return $ok ? $dst : '';
 }

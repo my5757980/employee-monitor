@@ -67,6 +67,8 @@ switch ($cmd) {
         $base = em_config()['data_dir'] . '/shots/';
         foreach ($old as $row) {
             @unlink($base . $row['path']);
+            @unlink($base . $row['path'] . '.360.jpg');   // cached thumbnails
+            @unlink($base . $row['path'] . '.960.jpg');
         }
         if ($old) {
             $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $old));

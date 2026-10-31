@@ -235,6 +235,8 @@ async function api(path, opts = {}) {
 }
 const fmtAgo = (s) => s == null ? 'never' : s < 60 ? 'just now' : s < 3600 ? Math.floor(s/60)+'m ago' : s < 86400 ? Math.floor(s/3600)+'h ago' : Math.floor(s/86400)+'d ago';
 const esc = (t) => (t||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// One place that builds a screenshot URL. w=360 grid/history, w=960 main/live, ''=full (Fullscreen).
+const shotUrl = (p, w) => '/api/admin/shot?p=' + encodeURIComponent(p) + (w ? '&w=' + w : '');
 
 // ---- login ----
 $('#loginForm').addEventListener('submit', async (e) => {
@@ -249,36 +251,56 @@ $('#loginForm').addEventListener('submit', async (e) => {
 $('#logout').addEventListener('click', async () => { await api('/api/admin/logout', {method:'POST'}); location.reload(); });
 
 // ---- the grid ----
-let timer = null;
+let timer = null, gridIds = '';
+let liveId = null, liveUntil = 0, liveBusy = false, curPath = null, lastShotId = null;
 async function loadDevices() {
   const d = await api('/api/admin/devices');
   $('#counts').textContent = d.devices.length + ' computer' + (d.devices.length===1?'':'s') + ' • ' +
       d.devices.filter(x=>x.online).length + ' online';
   $('#empty').classList.toggle('hidden', d.devices.length > 0);
-  $('#grid').innerHTML = d.devices.map(tile).join('');
-  document.querySelectorAll('[data-dev]').forEach(el =>
-    el.addEventListener('click', () => openDetail(el.getAttribute('data-dev'))));
+  // Rebuild the DOM only when the set of computers changes; otherwise refresh each
+  // tile in place, so the 8s poll never re-decodes images or makes tiles flicker.
+  const ids = d.devices.map(x=>x.id).slice().sort((a,b)=>a-b).join(',');
+  if (ids !== gridIds) {
+    gridIds = ids;
+    $('#grid').innerHTML = d.devices.map(tile).join('');
+    document.querySelectorAll('[data-dev]').forEach(el =>
+      el.addEventListener('click', () => openDetail(el.getAttribute('data-dev'))));
+  } else {
+    d.devices.forEach(updateTile);
+  }
+}
+function actHtml(x) { return x.is_idle ? '<span class="text-amber-600">Idle</span>' : esc(x.active_app || '—'); }
+function pillHtml(x) {
+  return x.online
+    ? '<span data-pill class="absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-500/90 text-white rounded-full px-2 py-0.5"><span class="w-1.5 h-1.5 rounded-full bg-white"></span>LIVE</span>'
+    : '<span data-pill class="absolute top-2 left-2 text-[10px] font-semibold bg-slate-700/80 text-white rounded-full px-2 py-0.5">OFFLINE</span>';
 }
 function tile(x) {
-  const shot = x.last_shot ? `/api/admin/shot?p=${encodeURIComponent(x.last_shot)}` : '';
+  const shot = x.last_shot ? shotUrl(x.last_shot, 360) : '';
   const name = esc(x.employee_name || x.hostname || ('PC #'+x.id));
   const grp  = x.group_name ? `<span class="text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 shrink-0">${esc(x.group_name)}</span>` : '';
-  const act  = x.is_idle ? '<span class="text-amber-600">Idle</span>' : esc(x.active_app || '—');
-  const pill = x.online
-    ? '<span class="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-500/90 text-white rounded-full px-2 py-0.5"><span class="w-1.5 h-1.5 rounded-full bg-white"></span>LIVE</span>'
-    : '<span class="text-[10px] font-semibold bg-slate-700/80 text-white rounded-full px-2 py-0.5">OFFLINE</span>';
   return `<div data-dev="${x.id}" class="group bg-white rounded-xl shadow-sm hover:shadow-lg hover:ring-2 hover:ring-indigo-200 transition cursor-pointer overflow-hidden border border-slate-200">
     <div class="relative">
-      ${shot ? `<img src="${shot}" class="tile-shot w-full group-hover:opacity-95">` : `<div class="tile-shot w-full grid place-items-center text-slate-400 text-sm">No screenshot yet</div>`}
-      <span class="absolute top-2 left-2">${pill}</span>
+      ${shot ? `<img src="${shot}" loading="lazy" decoding="async" class="tile-shot w-full group-hover:opacity-95">` : `<div class="tile-shot w-full grid place-items-center text-slate-400 text-sm">No screenshot yet</div>`}
+      ${pillHtml(x)}
     </div>
     <div class="p-3">
       <div class="flex items-center gap-2">
         <span class="font-semibold text-sm truncate">${name}</span>${grp}
-        <span class="ml-auto text-xs text-slate-400 shrink-0">${fmtAgo(x.ago)}</span>
+        <span data-ago class="ml-auto text-xs text-slate-400 shrink-0">${fmtAgo(x.ago)}</span>
       </div>
-      <p class="text-xs text-slate-500 mt-1 truncate">${act}</p>
+      <p data-act class="text-xs text-slate-500 mt-1 truncate">${actHtml(x)}</p>
     </div></div>`;
+}
+function updateTile(x) {
+  const el = document.querySelector(`[data-dev="${x.id}"]`);
+  if (!el) return;
+  const img = el.querySelector('img.tile-shot');
+  if (img && x.last_shot) { const want = shotUrl(x.last_shot, 360); if (img.getAttribute('src') !== want) img.src = want; }
+  const pill = el.querySelector('[data-pill]'); if (pill) pill.outerHTML = pillHtml(x);
+  const ago = el.querySelector('[data-ago]'); if (ago) ago.textContent = fmtAgo(x.ago);
+  const act = el.querySelector('[data-act]'); if (act) act.innerHTML = actHtml(x);
 }
 
 // ---- detail ----
@@ -288,12 +310,17 @@ async function openDetail(id) {
   $('#dSub').textContent  = [d.hostname, d.os, 'agent '+d.agent_version, d.consent_ack ? 'notice shown' : 'notice pending'].filter(Boolean).join(' • ');
   const shots = d.screenshots || [];
   if (shots.length) {
-    $('#dShot').src = '/api/admin/shot?p=' + encodeURIComponent(shots[0].path);
+    curPath = shots[0].path; lastShotId = shots[0].id;
+    $('#dShot').src = shotUrl(curPath, 960);
     $('#dShotTs').textContent = 'Latest: ' + shots[0].ts;
-  } else { $('#dShot').removeAttribute('src'); $('#dShotTs').textContent = 'No screenshots yet'; }
+  } else { curPath = null; lastShotId = null; $('#dShot').removeAttribute('src'); $('#dShotTs').textContent = 'No screenshots yet'; }
   $('#dHistory').innerHTML = shots.slice(0,12).map(s =>
-    `<img src="/api/admin/shot?p=${encodeURIComponent(s.path)}" title="${s.ts}" class="tile-shot rounded border cursor-pointer"
-       onclick="document.querySelector('#dShot').src=this.src;document.querySelector('#dShotTs').textContent='${s.ts}'">`).join('');
+    `<img src="${shotUrl(s.path, 360)}" title="${esc(s.ts)}" data-path="${esc(s.path)}" loading="lazy" decoding="async" class="histShot tile-shot rounded border cursor-pointer">`).join('');
+  document.querySelectorAll('#dHistory .histShot').forEach(im => im.addEventListener('click', () => {
+    curPath = im.getAttribute('data-path');
+    $('#dShot').src = shotUrl(curPath, 960);          // open the sharp 960 copy, not the 360 thumb
+    $('#dShotTs').textContent = im.getAttribute('title');
+  }));
   $('#dAct').innerHTML = (d.activity||[]).map(a =>
     `<div class="py-1.5 border-b flex gap-2">
        <span class="text-xs text-slate-400 w-28 shrink-0">${a.ts}</span>
@@ -323,7 +350,8 @@ function showFrame(i) {
   if (!frames.length) return;
   i = Math.max(0, Math.min(frames.length - 1, i | 0));
   const f = frames[i];
-  $('#dShot').src = '/api/admin/shot?p=' + encodeURIComponent(f.path);
+  curPath = f.path;
+  $('#dShot').src = shotUrl(f.path, 960);
   $('#dShotTs').textContent = f.ts;
   $('#playTs').textContent = f.ts + '  (' + (i + 1) + '/' + frames.length + ')';
 }
@@ -341,8 +369,8 @@ $('#playBtn').addEventListener('click', () => {
   }, 500);
 });
 
-$('#dClose').addEventListener('click', () => { stopPlay(); $('#detail').classList.add('hidden'); });
-$('#dFs').addEventListener('click', () => { $('#liveFsImg').src = $('#dShot').src; $('#liveFs').classList.add('on'); });
+$('#dClose').addEventListener('click', () => { stopPlay(); liveId = null; liveUntil = 0; $('#detail').classList.add('hidden'); loadDevices(); });
+$('#dFs').addEventListener('click', () => { $('#liveFsImg').src = curPath ? shotUrl(curPath, '') : $('#dShot').src; $('#liveFs').classList.add('on'); });
 $('#liveFs').addEventListener('click', () => $('#liveFs').classList.remove('on'));
 $('#dEdit').addEventListener('click', async () => {
   const id = $('#detail').getAttribute('data-id');
@@ -394,7 +422,6 @@ async function loadApps(id) {
 }
 
 // control buttons + restrictions (wired once; the panel is always in the DOM)
-let liveId = null, liveUntil = 0;
 document.querySelectorAll('.cbtn').forEach(b => b.addEventListener('click',
   () => sendCommand($('#detail').getAttribute('data-id'), b.getAttribute('data-cmd'))));
 $('#polSave').addEventListener('click', async () => {
@@ -408,22 +435,24 @@ $('#polSave').addEventListener('click', async () => {
 // doesn't drop while the admin is watching.
 setInterval(async () => {
   const id = $('#detail').getAttribute('data-id');
-  if ($('#detail').classList.contains('hidden') || Date.now() > liveUntil || id !== liveId) return;
+  if ($('#detail').classList.contains('hidden') || Date.now() > liveUntil || id !== liveId || liveBusy) return;
   // renew the live window before it expires so watching stays continuous
   if (liveUntil - Date.now() < 45000) {
     api('/api/admin/command', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ device_id: Number(id), type:'live', payload:'120' }) }).catch(()=>{});
     liveUntil = Date.now() + 120000;
   }
+  liveBusy = true;
   try {
-    const { device: d } = await api('/api/admin/device?id=' + id);
-    if (d.screenshots && d.screenshots.length) {
-      $('#dShot').src = '/api/admin/shot?p=' + encodeURIComponent(d.screenshots[0].path) + '&t=' + Date.now();
-      if ($('#liveFs').classList.contains('on')) $('#liveFsImg').src = $('#dShot').src;
-      $('#dShotTs').textContent = 'Live: ' + d.screenshots[0].ts;
+    const d = await api('/api/admin/live?id=' + id);           // tiny: newest frame only
+    if (d.shot && d.shot.id !== lastShotId) {                  // swap the image only when the frame actually changed
+      lastShotId = d.shot.id; curPath = d.shot.path;
+      $('#dShot').src = shotUrl(curPath, 960);
+      if ($('#liveFs').classList.contains('on')) $('#liveFsImg').src = shotUrl(curPath, '');
+      $('#dShotTs').textContent = 'Live: ' + d.shot.ts;
     }
-  } catch (e) {}
-}, 500);
+  } catch (e) {} finally { liveBusy = false; }
+}, 1000);
 
 const CONFIRM = { logoff:'Log this user off?', restart:'Restart this computer?', shutdown:'Shut this computer down?' };
 async function sendCommand(id, type) {
@@ -483,11 +512,10 @@ $('#addCopy').addEventListener('click', () => navigator.clipboard.writeText($('#
 // ---- cameras: open the office camera system's OWN web page (no restreaming) ----
 function camSetMsg(t, bad) { const m = $('#camMsg'); m.textContent = t; m.className = 'text-sm mt-3 ' + (bad ? 'text-red-600' : 'text-emerald-600'); m.classList.remove('hidden'); }
 $('#camBtn').addEventListener('click', async () => {
-  let url = '';
-  try { const d = await api('/api/admin/cameras'); url = d.url || ''; } catch (e) {}
-  $('#camUrl').value = url;
+  $('#camUrl').value = '';
   $('#camMsg').classList.add('hidden');
-  $('#camModal').classList.remove('hidden');
+  $('#camModal').classList.remove('hidden');          // open instantly, fill the address after
+  try { const d = await api('/api/admin/cameras'); $('#camUrl').value = d.url || ''; } catch (e) {}
 });
 $('#camClose').addEventListener('click', () => $('#camModal').classList.add('hidden'));
 async function camSave() {
@@ -526,6 +554,8 @@ async function openNotice(id) {
   $('#ntMsg').classList.add('hidden');
   document.querySelector('input[name=ntScope][value=one]').checked = true;
   $('#ntPick').classList.add('hidden');
+  $('#ntOneName').textContent = 'PC #' + id;
+  $('#noticeModal').classList.remove('hidden');        // open instantly, fill the list after
   try {
     const { devices } = await api('/api/admin/devices');
     const me = devices.find(x => Number(x.id) === ntDeviceId);
@@ -534,8 +564,7 @@ async function openNotice(id) {
       const nm = esc(x.employee_name || x.hostname || ('PC #' + x.id));
       return `<label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" class="ntDev" value="${x.id}" ${Number(x.id) === ntDeviceId ? 'checked' : ''}> ${nm}</label>`;
     }).join('') || '<span class="text-xs text-slate-400">No computers.</span>';
-  } catch (e) { $('#ntOneName').textContent = 'PC #' + id; }
-  $('#noticeModal').classList.remove('hidden');
+  } catch (e) {}
 }
 
 // Record the owner's voice as a WAV the agent can play with no extra software.
@@ -615,7 +644,9 @@ async function start() {
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   const me = await api('/api/admin/me'); $('#who').textContent = me.name;
   await loadDevices();
-  clearInterval(timer); timer = setInterval(loadDevices, 8000);
+  // Pause the grid poll while a computer's detail panel is open (it has its own
+  // live refresh), so the two don't compete.
+  clearInterval(timer); timer = setInterval(() => { if ($('#detail').classList.contains('hidden')) loadDevices(); }, 8000);
 }
 (async () => { try { await api('/api/admin/me'); start(); } catch (e) { $('#login').classList.remove('hidden'); } })();
 </script>

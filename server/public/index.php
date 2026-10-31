@@ -277,21 +277,35 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true, 'device' => $dev]);
     }
 
+    // A tiny poll for Live view: only the newest frame + the online flag, so
+    // watching costs one small query a second instead of re-reading all history.
+    if ($path === '/api/admin/live' && $method === 'GET') {
+        require_admin();
+        $id   = (int) ($_GET['id'] ?? 0);
+        $shot = q1('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY ts DESC LIMIT 1', [$id]);
+        $dev  = q1('SELECT (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago FROM devices WHERE id = ?', [$id]);
+        $ago  = $dev['ago'] ?? null;
+        json_out(['ok' => true, 'shot' => $shot ?: null, 'ago' => $ago, 'online' => ($ago !== null && $ago < 180)]);
+    }
+
     if ($path === '/api/admin/report' && $method === 'GET') {
         require_admin();
-        $id  = (int) ($_GET['id'] ?? 0);
-        $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['day'] ?? '') ? $_GET['day'] : date('Y-m-d');
+        $id   = (int) ($_GET['id'] ?? 0);
+        $day  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['day'] ?? '') ? $_GET['day'] : date('Y-m-d');
+        // Range on ts (not DATE(ts)) so the (device_id, ts) index is used.
+        $from = $day . ' 00:00:00';
+        $to   = date('Y-m-d', strtotime($day . ' +1 day')) . ' 00:00:00';
         $apps = q(
             "SELECT active_app, COUNT(*) AS samples, SUM(is_idle) AS idle
-             FROM activity WHERE device_id = ? AND DATE(ts) = ? AND active_app <> ''
+             FROM activity WHERE device_id = ? AND ts >= ? AND ts < ? AND active_app <> ''
              GROUP BY active_app ORDER BY samples DESC LIMIT 30",
-            [$id, $day]
+            [$id, $from, $to]
         );
         $sites = q(
             "SELECT website, COUNT(*) AS samples FROM activity
-             WHERE device_id = ? AND DATE(ts) = ? AND website <> ''
+             WHERE device_id = ? AND ts >= ? AND ts < ? AND website <> ''
              GROUP BY website ORDER BY samples DESC LIMIT 30",
-            [$id, $day]
+            [$id, $from, $to]
         );
         json_out(['ok' => true, 'day' => $day, 'apps' => $apps, 'sites' => $sites, 'sample_seconds' => $cfg['sample_seconds']]);
     }
@@ -301,10 +315,12 @@ function route(string $path, string $method, array $cfg): void
         require_admin();
         $id  = (int) ($_GET['id'] ?? 0);
         $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['day'] ?? '') ? $_GET['day'] : date('Y-m-d');
+        $from = $day . ' 00:00:00';
+        $to   = date('Y-m-d', strtotime($day . ' +1 day')) . ' 00:00:00';
         $sec = (int) $cfg['sample_seconds'];
         $dev = q1('SELECT employee_name, hostname FROM devices WHERE id = ?', [$id]);
-        $apps = q("SELECT active_app, COUNT(*) s, SUM(is_idle) i FROM activity WHERE device_id=? AND DATE(ts)=? AND active_app<>'' GROUP BY active_app ORDER BY s DESC", [$id, $day]);
-        $sites = q("SELECT website, COUNT(*) s FROM activity WHERE device_id=? AND DATE(ts)=? AND website<>'' GROUP BY website ORDER BY s DESC", [$id, $day]);
+        $apps = q("SELECT active_app, COUNT(*) s, SUM(is_idle) i FROM activity WHERE device_id=? AND ts>=? AND ts<? AND active_app<>'' GROUP BY active_app ORDER BY s DESC", [$id, $from, $to]);
+        $sites = q("SELECT website, COUNT(*) s FROM activity WHERE device_id=? AND ts>=? AND ts<? AND website<>'' GROUP BY website ORDER BY s DESC", [$id, $from, $to]);
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="report-' . $id . '-' . $day . '.csv"');
         $out = fopen('php://output', 'w');
@@ -544,9 +560,24 @@ function route(string $path, string $method, array $cfg): void
         if (!is_file($full)) {
             fail('Not found.', 404);
         }
+        // Serve a width-capped copy for the grid (w=360) and the main / live view
+        // (w=960); full resolution only when no width is asked (Fullscreen). Each
+        // size is built once and cached beside the original.
+        $file = $full;
+        $w    = (int) ($_GET['w'] ?? 0);
+        if ($w === 360 || $w === 960) {
+            $thumb = $full . '.' . $w . '.jpg';
+            if (!is_file($thumb) || filemtime($thumb) < filemtime($full)) {
+                em_make_thumb($full, $thumb, $w);
+            }
+            if (is_file($thumb)) {
+                $file = $thumb;
+            }
+        }
         header('Content-Type: image/jpeg');
         header('Cache-Control: private, max-age=86400');
-        readfile($full);
+        header('Content-Length: ' . filesize($file));
+        readfile($file);
         exit;
     }
 
