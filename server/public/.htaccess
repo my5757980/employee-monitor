@@ -10,4 +10,7 @@
 # Belt and suspenders for Apache 2.4.13+ (mod_php honours this too).
 <IfModule mod_php.c>
   CGIPassAuth On
+  # A notice may carry a picture (6 MB) and a voice clip (12 MB), the limits index.php enforces.
+  php_value upload_max_filesize 14M
+  php_value post_max_size 20M
 </IfModule>

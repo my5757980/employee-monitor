@@ -64,4 +64,13 @@ separate from anything else.
 `EM_DB_HOST`, `EM_DB_PORT`, `EM_DB_NAME`, `EM_DB_USER`, `EM_DB_PASS`,
 `EM_DATA_DIR` (where screenshots are stored), `EM_CONSENT_NOTICE` (the notice
 text the agent shows), `EM_SAMPLE_SECONDS` (how often it samples),
-`EM_RETENTION_DAYS` (how long screenshots are kept).
+`EM_RETENTION_DAYS` (how long screenshots are kept), `EM_PING_HOLD` (seconds a
+computer's ping may wait so a new action reaches it at once, default 15, 0 turns
+it off).
+
+## Changing the dashboard
+
+The dashboard's styles are compiled into the page. After adding or changing a
+Tailwind class in `server/public/dashboard.html`, run
+`python server/tools/build_css.py`. See `specs/002-console-speed/` for how the
+page stays fast and what the numbers were.

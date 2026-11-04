@@ -20,4 +20,7 @@ return [
     'sample_seconds' => (int) (getenv('EM_SAMPLE_SECONDS') ?: 60),
     // Keep screenshots this many days (a cleanup task deletes older ones).
     'retention_days' => (int) (getenv('EM_RETENTION_DAYS') ?: 14),
+    // How long a computer's ping may wait for a new action, in seconds, so the
+    // action reaches it at once. The agent's own timeout is 30 s. 0 turns this off.
+    'ping_hold' => getenv('EM_PING_HOLD') !== false ? (int) getenv('EM_PING_HOLD') : 15,
 ];

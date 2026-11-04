@@ -4,8 +4,10 @@
 
 function json_out($data, int $status = 200): void
 {
-    http_response_code($status);
-    header('Content-Type: application/json; charset=utf-8');
+    if (!headers_sent()) {           // a held ping has already started its reply
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+    }
     echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -127,12 +129,169 @@ function log_event(?int $deviceId, string $type, string $detail = ''): void
     x('INSERT INTO events (device_id, type, detail) VALUES (?,?,?)', [$deviceId, $type, mb_substr($detail, 0, 500)]);
 }
 
+/** A small file per computer and purpose, by which one request tells another that
+ * something new is there, instantly and with no database. The folder is outside
+ * the web root. */
+function sig_file(int $deviceId, string $kind): string
+{
+    $dir = em_config()['data_dir'] . '/signal';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    return $dir . '/' . $deviceId . '.' . $kind;
+}
+
+function sig_put(int $deviceId, string $kind, string $value): void
+{
+    @file_put_contents(sig_file($deviceId, $kind), $value, LOCK_EX);
+}
+
+function sig_get(int $deviceId, string $kind): string
+{
+    $v = @file_get_contents(sig_file($deviceId, $kind));
+    return $v === false ? '' : $v;
+}
+
+/** Wake a computer's waiting ping, because an action or a rule is now there. */
+function sig_wake(int $deviceId): void
+{
+    sig_put($deviceId, 'cmd', uniqid('', true));
+}
+
+/** How many seconds this computer's ping may wait for a new action. 0 = answer now.
+ * The agent does its other work between pings, so a wait must never cost it:
+ *  - frames are flowing (live, record): never stall them;
+ *  - it has blocked applications: they are enforced on each ping, so keep that beat;
+ *  - its next activity sample is near: end before it is due, so reports stay right;
+ *  - its network cut an earlier wait: leave it alone for an hour. */
+function ping_hold(int $id, array $blockedApps, int $sampleSeconds): int
+{
+    $max = (int) em_config()['ping_hold'];
+    if ($max <= 0 || $blockedApps) {
+        return 0;
+    }
+    $now = time();
+    if ((int) sig_get($id, 'live') > $now || (int) sig_get($id, 'rec') > $now || (int) sig_get($id, 'nohold') > $now) {
+        return 0;
+    }
+    $held = (int) sig_get($id, 'hold');
+    if ($held > 0) {                     // its last wait never reached its end
+        sig_put($id, 'hold', '0');
+        if ($now <= $held + 5) {         // and it is already back, so the network cut it (a PC that was shut down takes longer)
+            sig_put($id, 'nohold', (string) ($now + 3600));
+            log_event($id, 'ping_hold_off', 'a waiting ping was cut short');
+            return 0;
+        }
+    }
+    $sample = (int) sig_get($id, 'sample');
+    if ($sample === 0) {
+        return 0;
+    }
+    return max(0, min($max, $sample + $sampleSeconds - $now - 4));
+}
+
+/** The grid's rows. One short indexed look-up per computer: the same answer as
+ * correlated sub-queries, which sort a computer's whole history each time (39 ms
+ * against 4 ms on the live data). */
+function device_rows(): array
+{
+    $rows = q(
+        'SELECT id, hostname, employee_name, group_name, os, agent_version, consent_ack, last_seen,
+                (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago
+         FROM devices WHERE active = 1 ORDER BY last_seen DESC'
+    );
+    $shot = db()->prepare('SELECT path FROM screenshots WHERE device_id = ? ORDER BY ts DESC LIMIT 1');
+    $act  = db()->prepare('SELECT active_app, window_title, is_idle FROM activity WHERE device_id = ? ORDER BY ts DESC LIMIT 1');
+    foreach ($rows as &$r) {
+        $shot->execute([$r['id']]);
+        $s = $shot->fetch();
+        $shot->closeCursor();
+        $act->execute([$r['id']]);
+        $a = $act->fetch();
+        $act->closeCursor();
+        $r['last_shot']    = $s ? $s['path'] : null;
+        $r['online']       = ($r['ago'] !== null && $r['ago'] < 180);
+        $r['active_app']   = $a ? $a['active_app'] : '';
+        $r['window_title'] = $a ? $a['window_title'] : '';
+        $r['is_idle']      = $a ? ((int) $a['is_idle'] === 1) : false;
+    }
+    unset($r);
+    return $rows;
+}
+
+function setting(string $key): string
+{
+    try {
+        $row = q1('SELECT sval FROM settings WHERE skey = ?', [$key]);
+    } catch (Throwable $e) {
+        return '';                   // the table comes with the next migrate
+    }
+    return (string) ($row['sval'] ?? '');
+}
+
+/** Everything the page needs to start, in one reply. */
+function boot_payload(array $admin): array
+{
+    return [
+        'ok'             => true,
+        'name'           => $admin['name'] ?: $admin['username'],
+        'role'           => $admin['role'],
+        'devices'        => device_rows(),
+        'sample_seconds' => em_config()['sample_seconds'],
+        'cameras_url'    => setting('cameras_url'),
+    ];
+}
+
+/** A day's application and website totals for one computer. */
+function report_data(int $id, string $day): array
+{
+    // Range on ts (not DATE(ts)) so the (device_id, ts) index is used.
+    $from = $day . ' 00:00:00';
+    $to   = date('Y-m-d', strtotime($day . ' +1 day')) . ' 00:00:00';
+    return [
+        'ok'  => true,
+        'day' => $day,
+        'apps' => q(
+            "SELECT active_app, COUNT(*) AS samples, SUM(is_idle) AS idle
+             FROM activity WHERE device_id = ? AND ts >= ? AND ts < ? AND active_app <> ''
+             GROUP BY active_app ORDER BY samples DESC LIMIT 30",
+            [$id, $from, $to]
+        ),
+        'sites' => q(
+            "SELECT website, COUNT(*) AS samples FROM activity
+             WHERE device_id = ? AND ts >= ? AND ts < ? AND website <> ''
+             GROUP BY website ORDER BY samples DESC LIMIT 30",
+            [$id, $from, $to]
+        ),
+        'sample_seconds' => em_config()['sample_seconds'],
+    ];
+}
+
+function procs_data(int $id): array
+{
+    $row  = q1('SELECT ts, apps FROM device_procs WHERE device_id = ?', [$id]);
+    $apps = $row && $row['apps'] ? json_decode($row['apps'], true) : [];
+    return ['ok' => true, 'ts' => $row['ts'] ?? null, 'apps' => is_array($apps) ? $apps : []];
+}
+
+function policy_data(int $id): array
+{
+    $pol = q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$id]);
+    return ['ok' => true, 'blocked_sites' => $pol['blocked_sites'] ?? '', 'blocked_apps' => $pol['blocked_apps'] ?? ''];
+}
+
+function commands_data(int $id): array
+{
+    return q('SELECT id, type, payload, status, result, created_at, done_at FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 30', [$id]);
+}
+
 /** Make a width-capped JPEG copy of a screenshot for fast thumbnails and live
  * frames (needs GD). The copy is cached next to the original, so each size is
- * built once. Returns the file written, the original if it is already small
- * enough, or '' if GD is missing or the source is unreadable (caller then serves
- * the full image). */
-function em_make_thumb(string $src, string $dst, int $w): string
+ * built once, and is written to a temporary name first, because browsers keep it
+ * for a long time and must never keep half a file. Returns the file written, the
+ * original if it is already small enough, or '' if GD is missing or the source is
+ * unreadable (caller then serves the full image). */
+function em_make_thumb(string $src, string $dst, int $w, int $quality = 72): string
 {
     if (!function_exists('imagecreatefromjpeg')) {
         return '';
@@ -153,8 +312,13 @@ function em_make_thumb(string $src, string $dst, int $w): string
     }
     $t = imagecreatetruecolor($nw, $nh);
     imagecopyresampled($t, $im, 0, 0, 0, 0, $nw, $nh, $sw, $sh);
-    $ok = @imagejpeg($t, $dst, 72);
+    imageinterlace($t, true);        // progressive: about 8% smaller here
+    $tmp = $dst . '.' . getmypid() . '.tmp';
+    $ok  = @imagejpeg($t, $tmp, $quality) && @rename($tmp, $dst);
     imagedestroy($t);
     imagedestroy($im);
+    if (!$ok) {
+        @unlink($tmp);
+    }
     return $ok ? $dst : '';
 }

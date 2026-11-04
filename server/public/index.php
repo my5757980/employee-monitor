@@ -68,16 +68,72 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/agent/ping' && $method === 'POST') {
         $dev = require_device();
         $b   = body();
+        $id  = (int) $dev['id'];
+        // Read the signal BEFORE looking for actions: one queued right after the
+        // look still changes the signal, so it wakes the wait below.
+        $seen = sig_get($id, 'cmd');
         x('UPDATE devices SET last_seen = NOW(), consent_ack = GREATEST(consent_ack, ?) WHERE id = ?',
-            [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $dev['id']]);
+            [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $id]);
+        // An action stays on offer until the computer reports on it. The agent runs what it
+        // gets and reports before its next ping, so 'sent' with no report means the reply
+        // never reached it (it dropped off while its ping was waiting). Recent ones only, and
+        // never the three that end a session: a second Restart is worse than a lost one, and
+        // the owner can see it never said 'done'.
+        $findCmds = fn () => q(
+            "SELECT id, type, payload FROM commands WHERE device_id = ? AND (status = 'pending'
+               OR (status = 'sent' AND type NOT IN ('logoff', 'restart', 'shutdown')
+                   AND created_at > NOW() - INTERVAL 180 SECOND))
+             ORDER BY id", [$id]);
+        $findPol  = fn () => q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$id]);
+        $cmds = $findCmds();
+        $pol  = $findPol();
+
+        // Nothing to do: keep the answer back for a while, so a new action reaches
+        // this computer the moment it is queued, with no change on the computer.
+        $hold = $cmds ? 0 : ping_hold($id, lines($pol['blocked_apps'] ?? ''), (int) $cfg['sample_seconds']);
+        if ($hold > 0) {
+            sig_put($id, 'hold', (string) (time() + $hold));
+            db_close();
+            header('Content-Type: application/json; charset=utf-8');
+            $sigFile = sig_file($id, 'cmd');
+            $end  = microtime(true) + $hold;
+            $beat = microtime(true);
+            while (microtime(true) < $end) {
+                usleep(50000);
+                if ((string) @file_get_contents($sigFile) !== $seen) {
+                    break;
+                }
+                if (microtime(true) - $beat >= 2) {   // a space is valid before JSON; if the computer has gone, PHP stops here
+                    echo ' ';
+                    flush();
+                    $beat = microtime(true);
+                }
+            }
+            // Same check once more, so an action is never handed to a computer that has gone.
+            echo ' ';
+            flush();
+            usleep(2000);
+            echo ' ';
+            flush();
+            sig_put($id, 'hold', '0');
+            x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$id]);
+            $cmds = $findCmds();
+            $pol  = $findPol();
+        }
 
         // Hand over any pending actions, once (mark them 'sent' so they don't repeat).
-        $cmds = q('SELECT id, type, payload FROM commands WHERE device_id = ? AND status = ? ORDER BY id', [$dev['id'], 'pending']);
         if ($cmds) {
             $ids = implode(',', array_map(fn ($c) => (int) $c['id'], $cmds));
             db()->exec("UPDATE commands SET status = 'sent' WHERE id IN ($ids)");
+            foreach ($cmds as $c) {               // while frames flow, pings must not wait
+                if ($c['type'] === 'live') {
+                    $secs = $c['payload'] === '' ? 60 : (int) $c['payload'];
+                    sig_put($id, 'live', (string) ($secs > 0 ? time() + $secs + 5 : 0));
+                } elseif ($c['type'] === 'record') {
+                    sig_put($id, 'rec', (string) (time() + ($c['payload'] === '' ? 5 : (int) $c['payload']) * 60 + 5));
+                }
+            }
         }
-        $pol = q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$dev['id']]);
 
         json_out([
             'ok'             => true,
@@ -123,6 +179,7 @@ function route(string $path, string $method, array $cfg): void
             $n++;
         }
         x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$dev['id']]);
+        sig_put((int) $dev['id'], 'sample', (string) time());
         json_out(['ok' => true, 'saved' => $n]);
     }
 
@@ -142,10 +199,13 @@ function route(string $path, string $method, array $cfg): void
         if (!move_uploaded_file($_FILES['shot']['tmp_name'], $full)) {
             fail('Could not store image.', 500);
         }
-        x('INSERT INTO screenshots (device_id, ts, path, w, h) VALUES (?,?,?,?,?)',
+        $shotId = x('INSERT INTO screenshots (device_id, ts, path, w, h) VALUES (?,?,?,?,?)',
             [$dev['id'], date('Y-m-d H:i:s', $ts), $dev['id'] . '/' . $name,
              (int) ($_POST['w'] ?? 0), (int) ($_POST['h'] ?? 0)]);
         x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$dev['id']]);
+        sig_put((int) $dev['id'], 'frame', json_encode(
+            ['id' => $shotId, 'ts' => date('Y-m-d H:i:s', $ts), 'path' => $dev['id'] . '/' . $name],
+            JSON_UNESCAPED_SLASHES));
         json_out(['ok' => true]);
     }
 
@@ -227,7 +287,7 @@ function route(string $path, string $method, array $cfg): void
             'samesite' => 'Lax',
         ]);
         log_event(null, 'admin_login', $user);
-        json_out(['ok' => true, 'name' => $a['name'] ?: $a['username'], 'role' => $a['role']]);
+        json_out(boot_payload($a));
     }
 
     if ($path === '/api/admin/logout' && $method === 'POST') {
@@ -243,37 +303,32 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true, 'name' => $a['name'] ?: $a['username'], 'role' => $a['role']]);
     }
 
+    // Everything the page needs to start, in one reply: one trip instead of three.
+    if ($path === '/api/admin/boot' && $method === 'GET') {
+        json_out(boot_payload(require_admin()));
+    }
+
     if ($path === '/api/admin/devices' && $method === 'GET') {
         require_admin();
-        $rows = q(
-            "SELECT d.id, d.hostname, d.employee_name, d.group_name, d.os, d.agent_version,
-                    d.consent_ack, d.last_seen,
-                    (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(d.last_seen)) AS ago,
-                    (SELECT path FROM screenshots s WHERE s.device_id = d.id ORDER BY s.ts DESC LIMIT 1) AS last_shot,
-                    (SELECT CONCAT(active_app,'|',window_title,'|',is_idle) FROM activity a
-                        WHERE a.device_id = d.id ORDER BY a.ts DESC LIMIT 1) AS last_act
-             FROM devices d WHERE d.active = 1 ORDER BY d.last_seen DESC"
-        );
-        foreach ($rows as &$r) {
-            $r['online'] = ($r['ago'] !== null && $r['ago'] < 180);
-            [$app, $title, $idle] = array_pad(explode('|', (string) $r['last_act'], 3), 3, '');
-            $r['active_app']   = $app;
-            $r['window_title'] = $title;
-            $r['is_idle']      = $idle === '1';
-            unset($r['last_act']);
-        }
-        json_out(['ok' => true, 'devices' => $rows, 'sample_seconds' => $cfg['sample_seconds']]);
+        json_out(['ok' => true, 'devices' => device_rows(), 'sample_seconds' => $cfg['sample_seconds']]);
     }
 
     if ($path === '/api/admin/device' && $method === 'GET') {
         require_admin();
         $id  = (int) ($_GET['id'] ?? 0);
-        $dev = q1('SELECT id, hostname, employee_name, group_name, os, agent_version, consent_ack, last_seen FROM devices WHERE id = ?', [$id]);
+        $dev = q1('SELECT id, hostname, employee_name, group_name, os, agent_version, consent_ack, last_seen,
+                          (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago FROM devices WHERE id = ?', [$id]);
         if (!$dev) {
             fail('Not found.', 404);
         }
+        $dev['online']      = ($dev['ago'] !== null && $dev['ago'] < 180);
         $dev['activity']    = q('SELECT ts, active_app, window_title, website, is_idle FROM activity WHERE device_id = ? ORDER BY ts DESC LIMIT 100', [$id]);
         $dev['screenshots'] = q('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY ts DESC LIMIT 40', [$id]);
+        // All four tabs in this one reply, so moving between tabs makes no trip.
+        $dev['report']   = report_data($id, date('Y-m-d'));
+        $dev['procs']    = procs_data($id);
+        $dev['policy']   = policy_data($id);
+        $dev['commands'] = commands_data($id);
         json_out(['ok' => true, 'device' => $dev]);
     }
 
@@ -288,26 +343,63 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true, 'shot' => $shot ?: null, 'ago' => $ago, 'online' => ($ago !== null && $ago < 180)]);
     }
 
+    // Live view without polling: this reply stays open and each new frame is written
+    // into it the moment the computer's upload is stored. Each message is
+    // [4 bytes: meta length][4 bytes: image length][meta JSON][JPEG]. The browser
+    // opens it again after 170 s, and falls back to /api/admin/live if a network on
+    // the way holds the stream back.
+    if ($path === '/api/admin/live-stream' && $method === 'GET') {
+        require_admin();
+        $id    = (int) ($_GET['id'] ?? 0);
+        $after = (int) ($_GET['after'] ?? 0);
+        db_close();                                // only files from here on
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        // The label makes proxies pass it straight through; the browser reads raw bytes.
+        header('Content-Type: text/event-stream');
+        header('Cache-Control: no-store, no-transform');
+        header('X-Accel-Buffering: no');           // tell our reverse proxy not to hold it
+        $send = function (array $meta, string $img = ''): void {
+            $m = json_encode($meta, JSON_UNESCAPED_SLASHES);
+            echo pack('NN', strlen($m), strlen($img)), $m, $img;
+            flush();
+        };
+        $send(['hello' => 1]);
+        $file  = sig_file($id, 'frame');
+        $base  = em_config()['data_dir'] . '/shots/';
+        $start = time();
+        $beat  = $start;
+        // A frame stored a while ago is not live: the page already shows the newest shot.
+        $last  = (is_file($file) && $start - filemtime($file) > 5) ? (string) @file_get_contents($file) : '';
+        while (time() - $start < 170) {
+            $raw = (string) @file_get_contents($file);
+            if ($raw !== '' && $raw !== $last) {
+                $last = $raw;
+                $f = json_decode($raw, true);
+                if (is_array($f) && (int) ($f['id'] ?? 0) > $after && is_string($f['path'] ?? null)) {
+                    $img = @file_get_contents($base . $f['path']);
+                    if ($img !== false) {
+                        $after = (int) $f['id'];
+                        $send($f, $img);
+                        $beat = time();
+                    }
+                }
+            }
+            if (time() - $beat >= 4) {             // if the browser has gone, PHP stops here
+                $send(['beat' => 1]);
+                $beat = time();
+            }
+            usleep(30000);
+        }
+        exit;
+    }
+
     if ($path === '/api/admin/report' && $method === 'GET') {
         require_admin();
-        $id   = (int) ($_GET['id'] ?? 0);
-        $day  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['day'] ?? '') ? $_GET['day'] : date('Y-m-d');
-        // Range on ts (not DATE(ts)) so the (device_id, ts) index is used.
-        $from = $day . ' 00:00:00';
-        $to   = date('Y-m-d', strtotime($day . ' +1 day')) . ' 00:00:00';
-        $apps = q(
-            "SELECT active_app, COUNT(*) AS samples, SUM(is_idle) AS idle
-             FROM activity WHERE device_id = ? AND ts >= ? AND ts < ? AND active_app <> ''
-             GROUP BY active_app ORDER BY samples DESC LIMIT 30",
-            [$id, $from, $to]
-        );
-        $sites = q(
-            "SELECT website, COUNT(*) AS samples FROM activity
-             WHERE device_id = ? AND ts >= ? AND ts < ? AND website <> ''
-             GROUP BY website ORDER BY samples DESC LIMIT 30",
-            [$id, $from, $to]
-        );
-        json_out(['ok' => true, 'day' => $day, 'apps' => $apps, 'sites' => $sites, 'sample_seconds' => $cfg['sample_seconds']]);
+        $id  = (int) ($_GET['id'] ?? 0);
+        $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['day'] ?? '') ? $_GET['day'] : date('Y-m-d');
+        json_out(report_data($id, $day));
     }
 
     // The day's report as a CSV file (for Excel).
@@ -386,6 +478,7 @@ function route(string $path, string $method, array $cfg): void
         $cid = x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
             [$id, $type, mb_substr($b['payload'] ?? '', 0, 1000), $a['id']]);
         log_event($id, 'command', $type . ' ' . ($b['payload'] ?? ''));
+        sig_wake($id);
         json_out(['ok' => true, 'command_id' => $cid]);
     }
 
@@ -414,6 +507,11 @@ function route(string $path, string $method, array $cfg): void
         }
         if (!$targets) {
             fail('No computers to send to.', 400);
+        }
+        foreach (['image' => 'picture', 'voice' => 'voice clip'] as $field => $word) {
+            if (in_array($_FILES[$field]['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+                fail("The $word is too large for the server. Please send a smaller one.", 400);
+            }
         }
         $hasImg = !empty($_FILES['image']['tmp_name']) && is_uploaded_file($_FILES['image']['tmp_name']);
         $hasVoc = !empty($_FILES['voice']['tmp_name']) && is_uploaded_file($_FILES['voice']['tmp_name']);
@@ -463,6 +561,7 @@ function route(string $path, string $method, array $cfg): void
         foreach ($targets as $did) {
             x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
                 [$did, 'notice', (string) $nid, $a['id']]);
+            sig_wake($did);
         }
         log_event(null, 'notice', 'sent #' . $nid . ' to ' . count($targets) . ' computer(s) [' . $scope . ']');
         json_out(['ok' => true, 'notice_id' => $nid, 'sent' => count($targets)]);
@@ -472,17 +571,13 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/commands' && $method === 'GET') {
         require_admin();
         $id = (int) ($_GET['id'] ?? 0);
-        json_out(['ok' => true, 'commands' => q(
-            'SELECT id, type, payload, status, result, created_at, done_at FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 30', [$id])]);
+        json_out(['ok' => true, 'commands' => commands_data($id)]);
     }
 
     // The computer's latest running-applications list (sent while watching live).
     if ($path === '/api/admin/procs' && $method === 'GET') {
         require_admin();
-        $id  = (int) ($_GET['id'] ?? 0);
-        $row = q1('SELECT ts, apps FROM device_procs WHERE device_id = ?', [$id]);
-        $apps = $row && $row['apps'] ? json_decode($row['apps'], true) : [];
-        json_out(['ok' => true, 'ts' => $row['ts'] ?? null, 'apps' => is_array($apps) ? $apps : []]);
+        json_out(procs_data((int) ($_GET['id'] ?? 0)));
     }
 
     // Stop an application now and keep it blocked (adds it to the block list).
@@ -503,15 +598,14 @@ function route(string $path, string $method, array $cfg): void
         x('INSERT INTO policies (device_id, blocked_apps) VALUES (?,?)
            ON DUPLICATE KEY UPDATE blocked_apps = VALUES(blocked_apps)', [$id, $text]);
         log_event($id, 'block_app', $app);
+        sig_wake($id);
         json_out(['ok' => true, 'blocked_apps' => $text]);
     }
 
     // Read or set what a computer may not run/open.
     if ($path === '/api/admin/policy' && $method === 'GET') {
         require_admin();
-        $id  = (int) ($_GET['id'] ?? 0);
-        $pol = q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$id]);
-        json_out(['ok' => true, 'blocked_sites' => $pol['blocked_sites'] ?? '', 'blocked_apps' => $pol['blocked_apps'] ?? '']);
+        json_out(policy_data((int) ($_GET['id'] ?? 0)));
     }
     if ($path === '/api/admin/policy' && $method === 'POST') {
         require_admin();
@@ -524,6 +618,7 @@ function route(string $path, string $method, array $cfg): void
            ON DUPLICATE KEY UPDATE blocked_sites = VALUES(blocked_sites), blocked_apps = VALUES(blocked_apps)',
             [$id, mb_substr($b['blocked_sites'] ?? '', 0, 8000), mb_substr($b['blocked_apps'] ?? '', 0, 8000)]);
         log_event($id, 'policy', 'updated');
+        sig_wake($id);
         json_out(['ok' => true]);
     }
 
@@ -568,14 +663,14 @@ function route(string $path, string $method, array $cfg): void
         if ($w === 360 || $w === 960) {
             $thumb = $full . '.' . $w . '.jpg';
             if (!is_file($thumb) || filemtime($thumb) < filemtime($full)) {
-                em_make_thumb($full, $thumb, $w);
+                em_make_thumb($full, $thumb, $w, $w === 360 ? 45 : 55);
             }
             if (is_file($thumb)) {
                 $file = $thumb;
             }
         }
         header('Content-Type: image/jpeg');
-        header('Cache-Control: private, max-age=86400');
+        header('Cache-Control: private, max-age=2592000, immutable');   // a name is never reused
         header('Content-Length: ' . filesize($file));
         readfile($file);
         exit;
@@ -586,8 +681,7 @@ function route(string $path, string $method, array $cfg): void
     // opens it in a new tab. No camera video is streamed or stored by this server.
     if ($path === '/api/admin/cameras' && $method === 'GET') {
         require_admin();
-        $row = q1("SELECT sval FROM settings WHERE skey = 'cameras_url'");
-        json_out(['ok' => true, 'url' => $row['sval'] ?? '']);
+        json_out(['ok' => true, 'url' => setting('cameras_url')]);
     }
     if ($path === '/api/admin/cameras' && $method === 'POST') {
         require_admin();
@@ -605,8 +699,18 @@ function route(string $path, string $method, array $cfg): void
 
     // ============ Dashboard (everything else) ============
     if ($path === '/' || $path === '/index.html') {
+        $file  = __DIR__ . '/dashboard.html';
+        $shell = sprintf('%x-%x', filemtime($file), filesize($file));
         header('Content-Type: text/html; charset=utf-8');
-        readfile(__DIR__ . '/dashboard.html');
+        header('Cache-Control: no-cache');
+        header('ETag: "' . $shell . '"');
+        header('X-Shell: ' . $shell);
+        // The reverse proxy and Apache may add W/ or -gzip when they compress.
+        if (str_replace(['W/', '"', '-gzip'], '', $_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $shell) {
+            http_response_code(304);
+            exit;
+        }
+        readfile($file);
         exit;
     }
 
