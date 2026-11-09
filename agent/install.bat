@@ -19,6 +19,13 @@ if errorlevel 1 ( echo Please run this as Administrator. & exit /b 1 )
 
 set "DEST=%ProgramFiles%\EmployeeMonitor"
 if not exist "%DEST%" mkdir "%DEST%"
+
+REM Stop a running agent first, or the copy fails with "being used by another
+REM process" when re-installing / upgrading on a computer that already has it.
+taskkill /F /IM EmployeeMonitorAgent.exe >nul 2>&1
+REM give Windows a moment to release the file lock
+ping -n 3 127.0.0.1 >nul
+
 copy /Y "%~dp0dist\EmployeeMonitorAgent.exe" "%DEST%\EmployeeMonitorAgent.exe" >nul
 if errorlevel 1 ( echo Could not copy the agent. Build it first ^(build.bat^). & exit /b 1 )
 

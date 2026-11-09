@@ -68,7 +68,8 @@ switch ($cmd) {
         foreach ($old as $row) {
             @unlink($base . $row['path']);
             @unlink($base . $row['path'] . '.360.jpg');   // cached thumbnails
-            @unlink($base . $row['path'] . '.960.jpg');
+            @unlink($base . $row['path'] . '.1280.jpg');
+            @unlink($base . $row['path'] . '.960.jpg');   // old size, clean up any left over
         }
         if ($old) {
             $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $old));

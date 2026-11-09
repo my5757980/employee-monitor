@@ -230,7 +230,7 @@ def website_from(app, title):
     return ""  # reserved for the browser-extension phase
 
 
-def take_screenshot(max_width=1280, quality=55):
+def take_screenshot(max_width=1920, quality=82):
     with mss.mss() as sct:
         mon = sct.monitors[1]  # primary screen
         raw = sct.grab(mon)
@@ -549,7 +549,7 @@ def main():
                 # Live frames are small so they arrive fast; a recording keeps full
                 # frames; the slow beat skips a still screen.
                 if live:
-                    data, size = take_screenshot(760, 32)
+                    data, size = take_screenshot(1280, 55)
                     srv.screenshot(data, size, now)
                     if now - last_procs > 4:          # the running-apps list, while watching
                         srv.procs(running_apps())

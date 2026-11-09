@@ -251,7 +251,7 @@ async function api(path, opts = {}) {
 const fmtAgo = (s) => s == null ? 'never' : s < 60 ? 'just now' : s < 3600 ? Math.floor(s/60)+'m ago' : s < 86400 ? Math.floor(s/3600)+'h ago' : Math.floor(s/86400)+'d ago';
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nameOf = (d) => d.employee_name || d.hostname || ('PC #' + d.id);
-// One place that builds a screenshot URL. w=360 grid/history, w=960 main/live, ''=full (Fullscreen).
+// One place that builds a screenshot URL. w=360 grid/history, w=1280 main/live, ''=full (Fullscreen).
 const shotUrl = (p, w) => '/api/admin/shot?p=' + encodeURIComponent(p) + (w ? '&w=' + w : '');
 // Change the page only when something really changed: no flicker, scroll stays put.
 function setHtml(el, html) { if (el.__html !== html) { el.__html = html; el.innerHTML = html; } }
@@ -456,7 +456,7 @@ function getDetail(id, force) {
 function warm(id) {
   getDetail(id).catch(() => {});
   const x = byId.get(String(id));
-  if (x && x.last_shot) preload(shotUrl(x.last_shot, 960)).catch(() => {});
+  if (x && x.last_shot) preload(shotUrl(x.last_shot, 1280)).catch(() => {});
 }
 // With the page quiet, fetch each computer's data and sharp picture, one at a time, so most
 // clicks need no trip at all. Not when the connection is slow or asks to save data.
@@ -470,7 +470,7 @@ function warmAll() {
     if (run !== warmingRun || !ids.length || document.hidden) return;
     const d = await getDetail(ids.shift()).catch(() => null);
     const newest = d && d.screenshots && d.screenshots[0];
-    if (newest) await Promise.race([preload(shotUrl(newest.path, 960)).catch(() => {}), wait(4000)]);
+    if (newest) await Promise.race([preload(shotUrl(newest.path, 1280)).catch(() => {}), wait(4000)]);
     setTimeout(next, 120);
   };
   setTimeout(next, 500);
@@ -566,7 +566,7 @@ function showBig(path) {
   const token = ++bigToken;
   bigEpoch++;
   const big = $('#dShot');
-  const sharp = shotUrl(path, 960);
+  const sharp = shotUrl(path, 1280);
   if (big.getAttribute('src') === sharp) return;
   if (readyPics.has(sharp)) { big.src = sharp; return; }
   big.src = shotUrl(path, 360);
@@ -582,7 +582,7 @@ $('#dHistory').addEventListener('click', (e) => {
 });
 $('#dHistory').addEventListener('pointerover', (e) => {
   const im = e.target.closest('.histShot');
-  if (im) preload(shotUrl(im.getAttribute('data-path'), 960)).catch(() => {});
+  if (im) preload(shotUrl(im.getAttribute('data-path'), 1280)).catch(() => {});
 });
 
 // ---- playback (scrub through recorded frames) ----
@@ -636,7 +636,7 @@ async function scrubPump() {
   scrubBusy = false;
 }
 function aheadOf(i, n) {
-  for (let k = 1; k <= n; k++) { const f = frames[i + k]; if (f) preload(shotUrl(f.path, 960)).catch(() => {}); }
+  for (let k = 1; k <= n; k++) { const f = frames[i + k]; if (f) preload(shotUrl(f.path, 1280)).catch(() => {}); }
 }
 function stopPlay() { playToken++; playing = false; setText($('#playBtn'), '▶ Play'); }
 $('#playSlider').addEventListener('input', (e) => { stopPlay(); scrubTo(Number(e.target.value)); });
@@ -651,7 +651,7 @@ $('#playBtn').addEventListener('click', async () => {
   // Each frame is loaded before it is shown, and the next few are already on their way.
   while (token === playToken && i < frames.length - 1) {
     i++;
-    const t0 = performance.now(), f = frames[i], url = shotUrl(f.path, 960);
+    const t0 = performance.now(), f = frames[i], url = shotUrl(f.path, 1280);
     aheadOf(i, 4);
     await Promise.race([preload(url).catch(() => {}), wait(2000)]);
     if (token !== playToken) return;
@@ -874,7 +874,7 @@ async function pollLoop(L) {
     try {
       const d = await api('/api/admin/live?id=' + L.id);
       if (d.shot && d.shot.id !== lastShotId) {
-        const url = shotUrl(d.shot.path, 960);
+        const url = shotUrl(d.shot.path, 1280);
         await preload(url);
         if (live !== L) return;
         lastShotId = d.shot.id; curPath = d.shot.path; bigToken++; bigEpoch++;

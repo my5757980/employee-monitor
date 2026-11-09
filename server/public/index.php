@@ -656,14 +656,14 @@ function route(string $path, string $method, array $cfg): void
             fail('Not found.', 404);
         }
         // Serve a width-capped copy for the grid (w=360) and the main / live view
-        // (w=960); full resolution only when no width is asked (Fullscreen). Each
-        // size is built once and cached beside the original.
+        // (w=1280, kept sharp); full resolution only when no width is asked
+        // (Fullscreen). Each size is built once and cached beside the original.
         $file = $full;
         $w    = (int) ($_GET['w'] ?? 0);
-        if ($w === 360 || $w === 960) {
+        if ($w === 360 || $w === 1280) {
             $thumb = $full . '.' . $w . '.jpg';
             if (!is_file($thumb) || filemtime($thumb) < filemtime($full)) {
-                em_make_thumb($full, $thumb, $w, $w === 360 ? 45 : 55);
+                em_make_thumb($full, $thumb, $w, $w === 360 ? 62 : 82);
             }
             if (is_file($thumb)) {
                 $file = $thumb;
