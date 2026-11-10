@@ -52,7 +52,7 @@ except Exception as e:  # pragma: no cover
     print("Missing libraries. Run: pip install -r requirements.txt")
     raise
 
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "1.1.0"
 IS_WIN = sys.platform.startswith("win")
 NO_DIALOG = False  # set by --no-dialog; prints notices instead of pop-ups (tests/services)
 
@@ -215,7 +215,13 @@ def idle_seconds():
         info = LASTINPUTINFO()
         info.cbSize = ctypes.sizeof(info)
         if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
-            millis = ctypes.windll.kernel32.GetTickCount() - info.dwTime
+            # GetTickCount and dwTime are 32-bit unsigned millisecond counters.
+            # Read GetTickCount unsigned and wrap the difference to 32 bits, so the
+            # idle time stays correct after ~24.9 days (signed overflow) and across
+            # the ~49.7-day counter wrap.
+            k = ctypes.windll.kernel32
+            k.GetTickCount.restype = ctypes.c_uint
+            millis = (k.GetTickCount() - info.dwTime) & 0xFFFFFFFF
             return millis / 1000.0
     return 0.0
 
@@ -358,6 +364,9 @@ def run_command(cmd, srv=None):
             return True, t + " scheduled"
         if t == "live":
             return True, "live"
+        if t == "record":
+            # The caller (main loop) turns on dense recording when this returns ok.
+            return True, "recording"
     except Exception as e:
         return False, str(e)[:120]
     return False, "unknown action"
@@ -385,13 +394,26 @@ def running_apps():
                 seen[n.lower()] = n
         except Exception:
             pass
-    return sorted(seen.values(), key=lambda s: s.lower())[:80]
+    return sorted(seen.values(), key=lambda s: s.lower())[:400]
+
+
+# Never kill these, even if an admin lists them: Windows would break, the desktop
+# would close, or the agent would stop watching itself.
+PROTECTED_APPS = {
+    "system", "system idle process", "registry", "memory compression",
+    "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe", "services.exe",
+    "lsass.exe", "svchost.exe", "explorer.exe", "dwm.exe", "fontdrvhost.exe",
+    "ctfmon.exe", "taskhostw.exe", "sihost.exe", "runtimebroker.exe",
+    "employeemonitoragent.exe", "python.exe", "pythonw.exe",
+}
 
 
 def enforce_blocked_apps(apps):
     if not apps:
         return
-    want = {a.lower() for a in apps}
+    want = {a.lower() for a in apps} - PROTECTED_APPS
+    if not want:
+        return
     try:
         import psutil
     except Exception:
@@ -399,7 +421,7 @@ def enforce_blocked_apps(apps):
     for p in psutil.process_iter(["name"]):
         try:
             name = (p.info["name"] or "").lower()
-            if name and name in want:
+            if name and name in want and name not in PROTECTED_APPS:
                 p.kill()
         except Exception:
             pass
@@ -434,7 +456,9 @@ def enforce_blocked_sites(sites):
         _applied_sites = key
     except PermissionError:
         if not _site_block_warned:
-            print("note: website blocking needs the agent to run as administrator.")
+            # Goes to agent.log (print is invisible in the windowless exe) so the
+            # failure is at least recorded on the computer.
+            log("note: website blocking could not be applied - the agent is not running as administrator.")
             _site_block_warned = True
 
 
