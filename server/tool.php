@@ -76,7 +76,36 @@ switch ($cmd) {
             db()->exec("DELETE FROM screenshots WHERE id IN ($ids)");
         }
         db()->exec('DELETE FROM activity WHERE ts < (NOW() - INTERVAL ' . (int) $days . ' DAY)');
+        // Old events and long-idle sessions are cleaned too, so those tables don't grow forever.
+        db()->exec('DELETE FROM events WHERE ts < (NOW() - INTERVAL 30 DAY)');
+        db()->exec('DELETE FROM admin_sessions WHERE last_seen < (NOW() - INTERVAL 14 DAY)');
+
+        // Disk guard: whatever the retention setting, never let the screenshots disk
+        // fill up. If free space is low, delete the oldest screenshots (across all
+        // computers) in batches until there is room again.
+        $dir     = em_config()['data_dir'];
+        $minFree = 600 * 1024 * 1024;   // keep ~600 MB free
+        $freed   = 0;
+        clearstatcache();
+        while (($free = @disk_free_space($dir)) !== false && $free < $minFree && $freed <= 200000) {
+            $batch = q('SELECT id, path FROM screenshots ORDER BY ts ASC LIMIT 500');
+            if (!$batch) {
+                break;
+            }
+            foreach ($batch as $row) {
+                @unlink($base . $row['path']);
+                @unlink($base . $row['path'] . '.360.jpg');
+                @unlink($base . $row['path'] . '.1280.jpg');
+            }
+            $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $batch));
+            db()->exec("DELETE FROM screenshots WHERE id IN ($ids)");
+            $freed += count($batch);
+            clearstatcache();
+        }
         echo 'Removed ' . count($old) . " old screenshots and old activity.\n";
+        if ($freed) {
+            echo "Disk guard: removed $freed more oldest screenshots to keep the disk from filling.\n";
+        }
         break;
 
     case 'status':

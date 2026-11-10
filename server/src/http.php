@@ -51,9 +51,12 @@ function require_admin(): array
     if ($tok === '') {
         fail('Please sign in.', 401);
     }
+    // A session that has not been used for 14 days is treated as expired, so an old
+    // cookie left on a machine cannot sign in forever.
     $row = q1(
         'SELECT a.*, UNIX_TIMESTAMP(s.last_seen) AS sess_seen
-         FROM admin_sessions s JOIN admins a ON a.id = s.admin_id WHERE s.token = ?',
+         FROM admin_sessions s JOIN admins a ON a.id = s.admin_id
+         WHERE s.token = ? AND s.last_seen > (NOW() - INTERVAL 14 DAY)',
         [$tok]
     );
     if (!$row) {

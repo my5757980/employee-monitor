@@ -74,6 +74,15 @@ function route(string $path, string $method, array $cfg): void
         $seen = sig_get($id, 'cmd');
         x('UPDATE devices SET last_seen = NOW(), consent_ack = GREATEST(consent_ack, ?) WHERE id = ?',
             [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $id]);
+        // Stale queued actions must not fire when a computer comes back much later
+        // (a "Shut down" pressed while a PC was off would otherwise run next day).
+        // Power actions expire after 5 minutes, anything else after an hour. Marked
+        // 'failed' (the status enum has no 'expired') with the reason, so the owner
+        // can see it never ran.
+        x("UPDATE commands SET status = 'failed', result = 'expired: computer was offline too long', done_at = NOW()
+           WHERE device_id = ? AND status = 'pending'
+             AND ( (type IN ('logoff','restart','shutdown') AND created_at < NOW() - INTERVAL 5 MINUTE)
+                   OR created_at < NOW() - INTERVAL 60 MINUTE )", [$id]);
         // An action stays on offer until the computer reports on it. The agent runs what it
         // gets and reports before its next ping, so 'sent' with no report means the reply
         // never reached it (it dropped off while its ping was waiting). Recent ones only, and
@@ -271,6 +280,12 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/login' && $method === 'POST') {
         $b    = body();
         $user = trim($b['username'] ?? '');
+        // Rate limit: too many wrong tries for this username in a short window are
+        // refused, so the password can't be brute-forced.
+        $fails = (int) (q1("SELECT COUNT(*) c FROM events WHERE type = 'admin_login_fail' AND detail = ? AND ts > NOW() - INTERVAL 10 MINUTE", [$user])['c'] ?? 0);
+        if ($fails >= 8) {
+            fail('Too many failed attempts. Please wait a few minutes and try again.', 429);
+        }
         $a    = q1('SELECT * FROM admins WHERE username = ?', [$user]);
         if (!$a || !password_verify($b['password'] ?? '', $a['password_hash'])) {
             log_event(null, 'admin_login_fail', $user);
