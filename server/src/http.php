@@ -72,6 +72,18 @@ function require_admin(): array
     return $row;
 }
 
+/** Like require_admin, but only an 'owner' may pass. A 'manager' account is
+ * read-only: it can watch the dashboard but cannot send actions, change
+ * restrictions, enrol or remove computers, or change settings. */
+function require_owner(): array
+{
+    $a = require_admin();
+    if (($a['role'] ?? '') !== 'owner') {
+        fail('This action is only available to the owner account.', 403);
+    }
+    return $a;
+}
+
 /** Read the raw Authorization header no matter how the web server exposes it.
  * Apache/mod_php often drops it from $_SERVER; a .htaccess rewrite re-adds it as
  * REDIRECT_HTTP_AUTHORIZATION, and apache_request_headers() has it directly. */

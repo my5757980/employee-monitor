@@ -447,7 +447,7 @@ function route(string $path, string $method, array $cfg): void
     }
 
     if ($path === '/api/admin/enroll-key' && $method === 'POST') {
-        require_admin();
+        require_owner();
         $b    = body();
         $code = enroll_code();
         x('INSERT INTO enroll_keys (enroll_key, label) VALUES (?,?)', [$code, mb_substr($b['label'] ?? '', 0, 128)]);
@@ -456,7 +456,7 @@ function route(string $path, string $method, array $cfg): void
 
     // Rename a computer / set its group.
     if ($path === '/api/admin/device-update' && $method === 'POST') {
-        require_admin();
+        require_owner();
         $b  = body();
         $id = (int) ($b['id'] ?? 0);
         if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
@@ -469,7 +469,7 @@ function route(string $path, string $method, array $cfg): void
 
     // Remove a computer from the dashboard (hides it; data kept).
     if ($path === '/api/admin/device-remove' && $method === 'POST') {
-        require_admin();
+        require_owner();
         $b  = body();
         $id = (int) ($b['id'] ?? 0);
         x('UPDATE devices SET active = 0 WHERE id = ?', [$id]);
@@ -479,7 +479,7 @@ function route(string $path, string $method, array $cfg): void
 
     // Send an action to a computer (the agent runs it on its next ping).
     if ($path === '/api/admin/command' && $method === 'POST') {
-        $a    = require_admin();
+        $a    = require_owner();
         $b    = body();
         $id   = (int) ($b['device_id'] ?? 0);
         $type = $b['type'] ?? '';
@@ -502,7 +502,7 @@ function route(string $path, string $method, array $cfg): void
     // and one 'notice' command is queued per computer. Multipart form:
     //   body, scope (one|some|all), device_ids (csv, for one/some), image, voice.
     if ($path === '/api/admin/notice' && $method === 'POST') {
-        $a     = require_admin();
+        $a     = require_owner();
         $text  = mb_substr(trim((string) ($_POST['body'] ?? '')), 0, 2000);
         $scope = in_array($_POST['scope'] ?? '', ['one', 'some', 'all'], true) ? $_POST['scope'] : 'one';
 
@@ -597,7 +597,7 @@ function route(string $path, string $method, array $cfg): void
 
     // Stop an application now and keep it blocked (adds it to the block list).
     if ($path === '/api/admin/block-app' && $method === 'POST') {
-        require_admin();
+        require_owner();
         $b   = body();
         $id  = (int) ($b['device_id'] ?? 0);
         $app = mb_substr(trim($b['app'] ?? ''), 0, 120);
@@ -623,7 +623,7 @@ function route(string $path, string $method, array $cfg): void
         json_out(policy_data((int) ($_GET['id'] ?? 0)));
     }
     if ($path === '/api/admin/policy' && $method === 'POST') {
-        require_admin();
+        require_owner();
         $b  = body();
         $id = (int) ($b['device_id'] ?? 0);
         if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
@@ -699,7 +699,7 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true, 'url' => setting('cameras_url')]);
     }
     if ($path === '/api/admin/cameras' && $method === 'POST') {
-        require_admin();
+        require_owner();
         $b   = body();
         $url = trim($b['url'] ?? '');
         if ($url !== '' && !preg_match('#^https?://#i', $url)) {
@@ -710,6 +710,18 @@ function route(string $path, string $method, array $cfg): void
            ON DUPLICATE KEY UPDATE sval = VALUES(sval)", [$url]);
         log_event(null, 'cameras', $url === '' ? 'link cleared' : 'link set');
         json_out(['ok' => true, 'url' => $url]);
+    }
+
+    // The activity / audit log: sign-ins, actions sent to computers, and settings
+    // changes. Owner-only, because it shows every admin's actions on every computer.
+    if ($path === '/api/admin/events' && $method === 'GET') {
+        require_owner();
+        $rows = q(
+            "SELECT e.ts, e.type, e.detail, d.hostname, d.employee_name
+             FROM events e LEFT JOIN devices d ON d.id = e.device_id
+             ORDER BY e.id DESC LIMIT 300"
+        );
+        json_out(['ok' => true, 'events' => $rows]);
     }
 
     // ============ Dashboard (everything else) ============
