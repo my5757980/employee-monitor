@@ -99,6 +99,7 @@ body.ro .owner-act{display:none!important}</style>
           <button id="dLive" title="Watch this computer live" class="owner-act absolute top-2 left-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-sm font-medium">● Live</button>
           <button id="dFs" title="Fullscreen" class="absolute top-2 right-2 bg-black/55 hover:bg-black/80 text-white rounded-lg px-3 py-1.5 text-sm font-medium">⛶ Fullscreen</button>
           <span id="dLiveState" class="hidden absolute bottom-2 left-2 max-w-[90%] truncate bg-black/55 text-white rounded-lg px-2 py-1 text-xs"></span>
+          <span id="remoteBadge" class="hidden absolute bottom-2 right-2 bg-indigo-600 text-white rounded-lg px-2 py-1 text-xs font-semibold">🖱 Controlling</span>
         </div>
         <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
         <div class="mt-4 bg-slate-50 rounded-lg p-3">
@@ -130,6 +131,8 @@ body.ro .owner-act{display:none!important}</style>
           <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mb-4">
             <button data-cmd="live"     class="cbtn bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 font-medium">● Live view</button>
             <button data-cmd="record"   class="cbtn bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-2 font-medium">⏺ Record</button>
+            <button id="remoteStart"    class="owner-act bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-medium">🖱 Take Control</button>
+            <button id="remoteStop"     class="owner-act hidden bg-slate-700 hover:bg-slate-800 text-white rounded-lg px-3 py-2 font-medium">■ Stop Control</button>
             <button data-cmd="message"  class="cbtn bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-medium">Send notice</button>
             <button data-cmd="lock"     class="cbtn bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-3 py-2 font-medium">Lock</button>
             <button data-cmd="logoff"   class="cbtn bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-2 font-medium">Log off</button>
@@ -501,6 +504,7 @@ function openDetail(id) {
   id = String(id);
   stopPlay();
   stopLive(true);
+  if (remoteOn) { sendRemote('remote_stop', ''); setRemoteUI(false); }
   curId = id; userPicked = false; repPicked = null; polDirty = false;
   localCmds = []; cmdRows = []; frames = []; lastShotId = null;
   $('#playSlider').max = 0; setText($('#playTs'), '');
@@ -683,6 +687,10 @@ $('#playBtn').addEventListener('click', async () => {
 function closePanel() {
   stopPlay();
   stopLive(true);
+  if (remoteOn) {
+    sendRemote('remote_stop', '');
+    setRemoteUI(false);
+  }
   curId = null;
   $('#detail').classList.add('hidden');
   if (shellChanged) { location.reload(); return; }
@@ -819,7 +827,7 @@ function stopLive(tellComputer) {
   if (tellComputer) api('/api/admin/command', postJson({ device_id: Number(L.id), type: 'live', payload: '0' })).catch(() => {});
   paintLiveUI();
 }
-function queueLive(id, secs, showRow) {
+function extendLive(id, secs, showRow) {
   const row = showRow ? { id: 0, type: 'live', payload: secs, status: 'sending', created_at: 'now' } : null;
   if (row) { localCmds.unshift(row); paintCommands(); }
   api('/api/admin/command', postJson({ device_id: Number(id), type: 'live', payload: secs }))
@@ -938,7 +946,7 @@ setInterval(() => {
   if (!L) return;
   paintLiveUI();
   // Keep the computer's live window open while the owner watches, and only then.
-  if (!document.hidden && L.until - Date.now() < 45000) { L.until = Date.now() + 120000; queueLive(L.id, '120', false); }
+  if (!document.hidden && L.until - Date.now() < 45000) { L.until = Date.now() + 120000; extendLive(L.id, '120', false); }
   liveTick++;
   if (curTab === 'apps' && L.id === curId && liveTick % 4 === 0) {
     api('/api/admin/procs?id=' + L.id).then(p => { if (curId === L.id) paintApps(p); }).catch(() => {});
@@ -1246,6 +1254,112 @@ document.querySelectorAll('input[name=ntScope]').forEach(r => r.addEventListener
   $('#ntPick').classList.toggle('hidden', document.querySelector('input[name=ntScope]:checked').value !== 'some')));
 $('#ntSend').addEventListener('click', sendNotice);
 $('#ntClose').addEventListener('click', () => { if (ntRecording) ntStopRec(); $('#noticeModal').classList.add('hidden'); });
+
+// ========== REMOTE CONTROL (mouse + keyboard) ==========
+let remoteOn = false;
+let lastMoveSent = 0;
+
+function setRemoteUI(on) {
+  remoteOn = on;
+  $('#remoteStart').classList.toggle('hidden', on);
+  $('#remoteStop').classList.toggle('hidden', !on);
+  const badge = $('#remoteBadge');
+  if (badge) badge.classList.toggle('hidden', !on);
+  const img = $('#dShot');
+  if (img) {
+    img.style.cursor = on ? 'crosshair' : '';
+    img.style.outline = on ? '3px solid #4f46e5' : '';
+  }
+}
+
+function sendRemote(type, payload) {
+  if (!curId) return;
+  api('/api/admin/command', postJson({
+    device_id: Number(curId),
+    type: type,
+    payload: String(payload || '')
+  })).catch(() => {});
+}
+
+function getImgCoords(e) {
+  const img = $('#dShot');
+  if (!img || !img.naturalWidth) return null;
+  const rect = img.getBoundingClientRect();
+  const scaleX = img.naturalWidth / rect.width;
+  const scaleY = img.naturalHeight / rect.height;
+  const x = Math.round((e.clientX - rect.left) * scaleX);
+  const y = Math.round((e.clientY - rect.top) * scaleY);
+  return { x: Math.max(0, x), y: Math.max(0, y) };
+}
+
+// Take Control button
+$('#remoteStart').addEventListener('click', () => {
+  if (!curId) return;
+  if (!live || live.id !== String(curId)) {
+    // Auto start live view so user can see what they're controlling
+    startLive(curId);
+  }
+  sendRemote('remote_start', '');
+  setRemoteUI(true);
+});
+
+// Stop Control button
+$('#remoteStop').addEventListener('click', () => {
+  sendRemote('remote_stop', '');
+  setRemoteUI(false);
+});
+
+// Mouse events on the live image
+$('#dShot').addEventListener('mousemove', (e) => {
+  if (!remoteOn || !curId) return;
+  const now = Date.now();
+  if (now - lastMoveSent < 80) return; // throttle (~12 moves/sec)
+  lastMoveSent = now;
+  const c = getImgCoords(e);
+  if (c) sendRemote('mouse_move', c.x + ',' + c.y);
+});
+
+$('#dShot').addEventListener('mousedown', (e) => {
+  if (!remoteOn || !curId) return;
+  e.preventDefault();
+  const c = getImgCoords(e);
+  if (c) {
+    sendRemote('mouse_move', c.x + ',' + c.y);
+    sendRemote('mouse_click', e.button === 2 ? 'right' : 'left');
+  }
+});
+
+$('#dShot').addEventListener('contextmenu', (e) => {
+  if (remoteOn) e.preventDefault();
+});
+
+$('#dShot').addEventListener('wheel', (e) => {
+  if (!remoteOn || !curId) return;
+  e.preventDefault();
+  const dy = e.deltaY > 0 ? -3 : 3;
+  sendRemote('mouse_scroll', String(dy));
+}, { passive: false });
+
+// Keyboard (only when control is active)
+document.addEventListener('keydown', (e) => {
+  if (!remoteOn || !curId) return;
+  // Don't capture when typing in inputs
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  e.preventDefault();
+
+  const special = {
+    'Enter': 'enter', 'Tab': 'tab', 'Escape': 'esc', 'Backspace': 'backspace',
+    'Delete': 'delete', 'ArrowUp': 'up', 'ArrowDown': 'down',
+    'ArrowLeft': 'left', 'ArrowRight': 'right', ' ': 'space',
+    'Home': 'home', 'End': 'end', 'PageUp': 'pageup', 'PageDown': 'pagedown'
+  };
+
+  if (special[e.key]) {
+    sendRemote('key', special[e.key]);
+  } else if (e.key.length === 1) {
+    sendRemote('key', e.key);
+  }
+});
 
 // ---- boot: draw what we know, then ask ----
 let shellChanged = false;

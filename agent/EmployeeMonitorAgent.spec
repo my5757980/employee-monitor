@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['E:/New folder/employee-monitor/agent/agent.py'],
+    ['agent.py'],
     pathex=[],
     binaries=[],
     datas=[],

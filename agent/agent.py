@@ -15,7 +15,7 @@ First run (enrol this PC once):
 After that just run:  python agent.py
 (When packaged as an .exe the company sets --server/--key in the installer.)
 
-Needs: pip install -r requirements.txt   (mss, Pillow, requests, psutil)
+Needs: pip install -r requirements.txt   (mss, Pillow, requests, psutil, pynput)
 Windows is the main target; it also runs on macOS/Linux with reduced detail.
 """
 import argparse
@@ -51,6 +51,15 @@ try:
 except Exception as e:  # pragma: no cover
     print("Missing libraries. Run: pip install -r requirements.txt")
     raise
+
+# Optional: remote control (mouse + keyboard). If pynput is missing the agent
+# still runs normally; only remote_start / mouse_* / key commands will fail.
+try:
+    from pynput.mouse import Controller as MouseController, Button
+    from pynput.keyboard import Controller as KeyboardController, Key
+    HAS_REMOTE = True
+except Exception:
+    HAS_REMOTE = False
 
 AGENT_VERSION = "1.1.0"
 IS_WIN = sys.platform.startswith("win")
@@ -367,6 +376,70 @@ def run_command(cmd, srv=None):
         if t == "record":
             # The caller (main loop) turns on dense recording when this returns ok.
             return True, "recording"
+
+        # ========== FULL REMOTE CONTROL (mouse + keyboard) ==========
+        if t == "remote_start":
+            if not HAS_REMOTE:
+                return False, "pynput not installed"
+            log("Remote control STARTED by admin")
+            return True, "remote started"
+
+        if t == "remote_stop":
+            log("Remote control STOPPED by admin")
+            return True, "remote stopped"
+
+        if t == "mouse_move":
+            if not HAS_REMOTE:
+                return False, "pynput not installed"
+            try:
+                parts = payload.replace(" ", "").split(",")
+                x, y = int(parts[0]), int(parts[1])
+                MouseController().position = (x, y)
+                return True, "moved"
+            except Exception as e:
+                return False, str(e)[:80]
+
+        if t == "mouse_click":
+            if not HAS_REMOTE:
+                return False, "pynput not installed"
+            try:
+                btn = Button.right if payload.strip().lower() == "right" else Button.left
+                MouseController().click(btn)
+                return True, "clicked"
+            except Exception as e:
+                return False, str(e)[:80]
+
+        if t == "mouse_scroll":
+            if not HAS_REMOTE:
+                return False, "pynput not installed"
+            try:
+                dy = int(payload or "0")
+                MouseController().scroll(0, dy)
+                return True, "scrolled"
+            except Exception as e:
+                return False, str(e)[:80]
+
+        if t == "key":
+            if not HAS_REMOTE:
+                return False, "pynput not installed"
+            try:
+                kb = KeyboardController()
+                special = {
+                    "enter": Key.enter, "tab": Key.tab, "esc": Key.esc,
+                    "escape": Key.esc, "backspace": Key.backspace,
+                    "delete": Key.delete, "up": Key.up, "down": Key.down,
+                    "left": Key.left, "right": Key.right,
+                    "ctrl": Key.ctrl, "alt": Key.alt, "shift": Key.shift,
+                    "space": Key.space, "home": Key.home, "end": Key.end,
+                    "pageup": Key.page_up, "pagedown": Key.page_down,
+                }
+                k = special.get(payload.strip().lower(), payload)
+                kb.press(k)
+                kb.release(k)
+                return True, "key sent"
+            except Exception as e:
+                return False, str(e)[:80]
+
     except Exception as e:
         return False, str(e)[:120]
     return False, "unknown action"

@@ -483,7 +483,9 @@ function route(string $path, string $method, array $cfg): void
         $b    = body();
         $id   = (int) ($b['device_id'] ?? 0);
         $type = $b['type'] ?? '';
-        $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live', 'record'];
+        // Remote control commands added here
+        $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live', 'record',
+                    'remote_start', 'remote_stop', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
         if (!in_array($type, $allowed, true)) {
             fail('Unknown action.', 400);
         }
