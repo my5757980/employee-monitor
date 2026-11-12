@@ -79,6 +79,8 @@ switch ($cmd) {
         // Old events and long-idle sessions are cleaned too, so those tables don't grow forever.
         db()->exec('DELETE FROM events WHERE ts < (NOW() - INTERVAL 30 DAY)');
         db()->exec('DELETE FROM admin_sessions WHERE last_seen < (NOW() - INTERVAL 14 DAY)');
+        // Old actions are cleared too, so the commands table cannot grow without bound.
+        db()->exec('DELETE FROM commands WHERE created_at < (NOW() - INTERVAL 30 DAY)');
 
         // Disk guard: whatever the retention setting, never let the screenshots disk
         // fill up. If free space is low, delete the oldest screenshots (across all

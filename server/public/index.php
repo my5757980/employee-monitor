@@ -42,6 +42,12 @@ function route(string $path, string $method, array $cfg): void
         if (!$row) {
             fail('Invalid enrollment key.', 403);
         }
+        // One-time keys: once a key has enrolled a computer it cannot enroll another.
+        // This makes "Remove computer" stick - a removed agent that still holds its key
+        // can no longer silently re-enroll itself and reappear as a brand-new computer.
+        if (!empty($row['used_by'])) {
+            fail('This install key was already used. Create a new key to add a computer.', 403);
+        }
         $deviceToken = token();
         $id = x(
             'INSERT INTO devices (device_token, hostname, employee_name, os, agent_version, last_seen)
