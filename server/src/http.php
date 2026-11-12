@@ -211,6 +211,57 @@ function sig_wake(int $deviceId): void
     sig_put($deviceId, 'cmd', uniqid('', true));
 }
 
+/** ---- Fast input channel for remote control ----
+ * The owner's mouse/keyboard events ride their own tiny file queue, NOT the commands
+ * table, so they never queue up, never need a per-event reply, and reach the computer
+ * in about one round trip. The agent drains this queue on a long-poll. */
+function input_push(int $deviceId, array $events): void
+{
+    $lines = '';
+    foreach ($events as $e) {
+        if (is_array($e)) {
+            $lines .= json_encode($e, JSON_UNESCAPED_SLASHES) . "\n";
+        }
+    }
+    if ($lines === '') {
+        return;
+    }
+    $file = sig_file($deviceId, 'input');
+    // If the computer isn't draining it (agent offline), drop the stale backlog first.
+    if ((int) @filesize($file) > 65536) {
+        @file_put_contents($file, '', LOCK_EX);
+    }
+    @file_put_contents($file, $lines, FILE_APPEND | LOCK_EX);
+    sig_put($deviceId, 'insig', uniqid('', true));   // wake the agent's waiting input poll
+}
+
+/** Read and clear the device's input queue in one locked step (so a push and a drain
+ * never tread on each other). Returns the parsed events, oldest first. */
+function input_drain(int $deviceId): array
+{
+    $fp = @fopen(sig_file($deviceId, 'input'), 'c+');
+    if (!$fp) {
+        return [];
+    }
+    $out = [];
+    if (flock($fp, LOCK_EX)) {
+        $raw = stream_get_contents($fp);
+        ftruncate($fp, 0);
+        fflush($fp);
+        flock($fp, LOCK_UN);
+        foreach (explode("\n", (string) $raw) as $line) {
+            if ($line !== '') {
+                $e = json_decode($line, true);
+                if (is_array($e)) {
+                    $out[] = $e;
+                }
+            }
+        }
+    }
+    fclose($fp);
+    return $out;
+}
+
 /** How many seconds this computer's ping may wait for a new action. 0 = answer now.
  * The agent does its other work between pings, so a wait must never cost it:
  *  - frames are flowing (live, record): never stall them;

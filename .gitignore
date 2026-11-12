@@ -5,4 +5,6 @@ __pycache__/
 *.pyc
 agent/dist/
 agent/build/
+agent/build_spec/
 deploy/
+.playwright-mcp/

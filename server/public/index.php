@@ -537,6 +537,43 @@ function route(string $path, string $method, array $cfg): void
         json_out(['ok' => true, 'command_id' => $cid]);
     }
 
+    // Remote control: the owner's mouse/keyboard events on their own fast queue, kept out
+    // of the commands table so they stay smooth and never pile up. Owner only.
+    if ($path === '/api/admin/input' && $method === 'POST') {
+        require_owner();
+        $b      = body();
+        $id     = (int) ($b['device_id'] ?? 0);
+        $events = is_array($b['events'] ?? null) ? $b['events'] : [];
+        if ($id && $events) {
+            input_push($id, array_slice($events, 0, 100));
+        }
+        json_out(['ok' => true]);
+    }
+
+    // The agent drains the owner's input (long-poll): returns at once when there is input,
+    // otherwise holds briefly so an event reaches the computer in about one round trip.
+    if ($path === '/api/agent/input' && $method === 'GET') {
+        $dev    = require_device();
+        $id     = (int) $dev['id'];
+        $events = input_drain($id);
+        if (!$events) {
+            $seen = sig_get($id, 'insig');
+            db_close();                       // hold no database connection while waiting
+            // A short hold: an owner event returns it at once (the signal changes), and when
+            // nothing is happening it returns every few seconds so the agent can promptly
+            // notice control ending and hand the keyboard/mouse back.
+            $end = microtime(true) + 4;
+            while (microtime(true) < $end) {
+                usleep(25000);
+                if (sig_get($id, 'insig') !== $seen) {
+                    break;
+                }
+            }
+            $events = input_drain($id);
+        }
+        json_out(['ok' => true, 'events' => $events]);
+    }
+
     // Send a NOTICE (text + optional picture + optional voice) to one computer,
     // several hand-picked computers, or all of them. The content is stored once
     // and one 'notice' command is queued per computer. Multipart form:

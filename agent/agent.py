@@ -306,6 +306,157 @@ def set_control_banner(on):
         _banner["stop"] = None
 
 
+# ----- the control session: hold back local input, apply the owner's input -----
+# While the owner is in control, the employee's own keyboard and mouse are held back so
+# the two don't fight over the cursor. This can never trap anyone:
+#   - the red banner stays up the whole time (control is never silent);
+#   - input is handed back the instant the owner presses Stop or closes the live view;
+#   - if the agent loses contact with the server, input is returned within a few seconds;
+#   - if the agent is closed or crashes, Windows restores input by itself;
+#   - Ctrl+Alt+Del always works, so there is always a way out.
+def block_input(on):
+    """Hold back (or restore) this computer's own keyboard + mouse. Returns True if it
+    took effect. Must be called from the same thread that injects the owner's input."""
+    if not IS_WIN:
+        return False
+    try:
+        return bool(ctypes.windll.user32.BlockInput(bool(on)))
+    except Exception:
+        return False
+
+
+_SPECIAL_KEYS = {}
+
+
+def _frac_xy(fx, fy):
+    """A fraction 0..1 of the screen -> absolute primary-screen pixels (or absolute if a
+    value is already above 1)."""
+    try:
+        a, b = float(fx), float(fy)
+    except (TypeError, ValueError):
+        return None
+    if a > 1.0 or b > 1.0:
+        return int(a), int(b)
+    w, h = _screen_size()
+    return int(round(a * (w - 1))), int(round(b * (h - 1)))
+
+
+def _apply_key(name):
+    if not HAS_REMOTE:
+        return
+    global _SPECIAL_KEYS
+    if not _SPECIAL_KEYS:
+        _SPECIAL_KEYS = {
+            "enter": Key.enter, "tab": Key.tab, "esc": Key.esc, "escape": Key.esc,
+            "backspace": Key.backspace, "delete": Key.delete, "up": Key.up, "down": Key.down,
+            "left": Key.left, "right": Key.right, "ctrl": Key.ctrl, "alt": Key.alt,
+            "shift": Key.shift, "space": Key.space, "home": Key.home, "end": Key.end,
+            "pageup": Key.page_up, "pagedown": Key.page_down,
+        }
+    k = _SPECIAL_KEYS.get(str(name).strip().lower(), name)
+    kb = KeyboardController()
+    kb.press(k)
+    kb.release(k)
+
+
+def _apply_events(events):
+    """Carry out a batch of the owner's input. Consecutive mouse moves are coalesced (only
+    the last is applied) so a fast drag never backs up. Returns 'stop' if a stop was sent."""
+    n = len(events)
+    for i, e in enumerate(events):
+        if not isinstance(e, dict):
+            continue
+        t = e.get("t")
+        try:
+            if t == "m":
+                if i + 1 < n and isinstance(events[i + 1], dict) and events[i + 1].get("t") == "m":
+                    continue                       # a newer move is right behind: skip this one
+                xy = _frac_xy(e.get("x"), e.get("y"))
+                if xy:
+                    MouseController().position = xy
+            elif t == "c":
+                m = MouseController()
+                if e.get("x") is not None:
+                    xy = _frac_xy(e.get("x"), e.get("y"))
+                    if xy:
+                        m.position = xy
+                m.click(Button.right if str(e.get("b")).lower() == "right" else Button.left)
+            elif t == "s":
+                MouseController().scroll(0, int(e.get("d") or 0))
+            elif t == "k":
+                _apply_key(e.get("k"))
+            elif t == "stop":
+                return "stop"
+        except Exception as ex:
+            log("control: could not apply input:", str(ex)[:80])
+    return None
+
+
+_control = {"thread": None, "stop": None}
+
+
+def _control_loop(srv, stop_event):
+    """Runs while the owner is in control: holds back local input, long-polls the owner's
+    events, and applies them. All injection happens on THIS thread - the one that blocked
+    input - so the owner's input gets through while the employee's is held back."""
+    global remote_requested
+    blocked = block_input(True)
+    log("control: started" + (", local input held." if blocked else " (could not hold local input - agent may not be elevated)."))
+    last_ok = time.time()
+    try:
+        while not stop_event.is_set():
+            try:
+                events = srv.input_poll()
+                last_ok = time.time()
+                if (not blocked) and IS_WIN:          # a network gap had released it; re-hold
+                    blocked = block_input(True)
+                if _apply_events(events) == "stop":
+                    remote_requested = False          # tell the main loop control is over
+                    break
+            except requests.RequestException:
+                # Failsafe: lost contact -> give the employee their input back after a few
+                # seconds, so a dropped network can never leave them locked out.
+                if blocked and time.time() - last_ok > 4:
+                    block_input(False)
+                    blocked = False
+                    log("control: lost contact, handed input back (failsafe).")
+                time.sleep(0.3)
+            except Exception as e:
+                log("control loop error:", str(e)[:120])
+                time.sleep(0.3)
+    finally:
+        if blocked:
+            block_input(False)
+        log("control: ended, local input restored.")
+
+
+def start_control(srv):
+    if _control["thread"] and _control["thread"].is_alive():
+        return
+    ev = threading.Event()
+    _control["stop"] = ev
+    _control["thread"] = threading.Thread(target=_control_loop, args=(srv, ev), daemon=True)
+    _control["thread"].start()
+
+
+def stop_control():
+    if _control["thread"]:
+        try:
+            _control["stop"].set()
+        except Exception:
+            pass
+        _control["thread"] = None
+
+
+def apply_control(active, srv):
+    """Keep the banner and the control session in step with whether control is active."""
+    set_control_banner(active)
+    if active:
+        start_control(srv)
+    else:
+        stop_control()
+
+
 # ----- what is the user doing right now -----
 def active_window():
     """(app, title) of the foreground window."""
@@ -447,6 +598,13 @@ class Server:
         r.raise_for_status()
         return r.json()
 
+    def input_poll(self):
+        """Long-poll the owner's remote-control input. Returns at once when there is
+        input, else after the server's brief hold. Its timeout is longer than the hold."""
+        r = self.s.get(self.base + "/api/agent/input", timeout=6, headers=self._headers())
+        r.raise_for_status()
+        return r.json().get("events", [])
+
     def download(self, path, suffix=""):
         """Fetch a file (a notice's picture or voice) to a temp file; return its path."""
         r = self.s.get(self.base + path, timeout=60, headers=self._headers())
@@ -519,46 +677,11 @@ def run_command(cmd, srv=None):
             return True, "remote stopped"
 
         if t in ("mouse_move", "mouse_click", "mouse_scroll", "key"):
-            if not HAS_REMOTE:
-                return False, "pynput not installed"
-            if not REMOTE_ACTIVE:
-                # No silent control: input is ignored unless control is on AND the owner
-                # is watching live, so nothing ever moves behind the employee's back.
-                return False, "control not active"
-            try:
-                if t == "mouse_move":
-                    x, y = _to_xy(payload)
-                    MouseController().position = (x, y)
-                    return True, "moved"
-                if t == "mouse_click":
-                    parts = payload.split(",")
-                    btn = Button.right if parts[0].strip().lower() == "right" else Button.left
-                    m = MouseController()
-                    if len(parts) >= 3:                              # the point rides with the
-                        x, y = _to_xy(parts[1] + "," + parts[2])     # click, so a move can never
-                        m.position = (x, y)                          # arrive after its own click
-                    m.click(btn)
-                    return True, "clicked"
-                if t == "mouse_scroll":
-                    MouseController().scroll(0, int(payload or "0"))
-                    return True, "scrolled"
-                if t == "key":
-                    kb = KeyboardController()
-                    special = {
-                        "enter": Key.enter, "tab": Key.tab, "esc": Key.esc,
-                        "escape": Key.esc, "backspace": Key.backspace,
-                        "delete": Key.delete, "up": Key.up, "down": Key.down,
-                        "left": Key.left, "right": Key.right,
-                        "ctrl": Key.ctrl, "alt": Key.alt, "shift": Key.shift,
-                        "space": Key.space, "home": Key.home, "end": Key.end,
-                        "pageup": Key.page_up, "pagedown": Key.page_down,
-                    }
-                    k = special.get(payload.strip().lower(), payload)
-                    kb.press(k)
-                    kb.release(k)
-                    return True, "key sent"
-            except Exception as e:
-                return False, str(e)[:80]
+            # Remote input now rides the fast input channel (see _control_loop), which is
+            # smooth and applies on the thread that holds local input. If one of these ever
+            # arrives here (from an older dashboard), just acknowledge it without acting, so
+            # it is never applied twice or from the wrong thread.
+            return True, "ok"
 
     except Exception as e:
         return False, str(e)[:120]
@@ -772,7 +895,7 @@ def main():
                     # action so input in this same batch is gated right and the employee's
                     # banner follows. A bad seconds value can no longer crash the loop.
                     REMOTE_ACTIVE = remote_requested and (time.time() < live_until)
-                    set_control_banner(REMOTE_ACTIVE)
+                    apply_control(REMOTE_ACTIVE, srv)
                     ok, result = run_command(cmd, srv)
                     if ok and cmd.get("type") == "live":
                         try:
@@ -786,9 +909,9 @@ def main():
                             record_until = now + 5 * 60
                     srv.command_result(cmd["id"], ok, result)
 
-                # Control ends the instant live ends; keep the banner in step.
+                # Control ends the instant live ends; keep the banner and session in step.
                 REMOTE_ACTIVE = remote_requested and (time.time() < live_until)
-                set_control_banner(REMOTE_ACTIVE)
+                apply_control(REMOTE_ACTIVE, srv)
 
                 # What this computer may not run / open.
                 pol = info.get("policy", {})
@@ -810,7 +933,12 @@ def main():
                 # Live frames are small so they arrive fast; a recording keeps full
                 # frames; the slow beat skips a still screen.
                 if live:
-                    data, size = take_screenshot(1280, 55)
+                    # While the owner is actually controlling, send smaller, quicker frames
+                    # so what they see keeps up with what they do; otherwise keep it sharp.
+                    if REMOTE_ACTIVE:
+                        data, size = take_screenshot(1024, 42)
+                    else:
+                        data, size = take_screenshot(1280, 55)
                     srv.screenshot(data, size, now)
                     if now - last_procs > 4:          # the running-apps list, while watching
                         srv.procs(running_apps())
@@ -842,7 +970,7 @@ def main():
                             enforce_blocked_sites([])
                         except Exception:
                             pass
-                        set_control_banner(False)
+                        apply_control(False, srv)
                         removed = True
                     else:
                         log("re-enroll failed:", str(e2)[:120])
@@ -850,7 +978,7 @@ def main():
                     log("re-enroll failed:", str(e2)[:120])
             elif code == 401:
                 log("Session rejected (401) and no key to re-enrol; going idle.")
-                set_control_banner(False)
+                apply_control(False, srv)
                 removed = True
             else:
                 net_fail += 1
