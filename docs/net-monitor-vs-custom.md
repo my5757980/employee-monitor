@@ -67,7 +67,7 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 | Filter by computer / user / time; export to file | ➖ can add (CSV + date range) |
 
 ## 10. Remote control
-| Take over the remote mouse/keyboard | ❌ **not built** — the safety system blocks it (it is technically a remote‑access/RAT tool). A real one is a separate TeamViewer/VNC‑class product. |
+| Take over the remote mouse/keyboard | ✅ built, **transparent**: it works only while Live view is on, and the employee sees an on‑screen banner (“Your administrator is viewing and controlling this computer”) the whole time. Never silent. |
 
 ## 11. Setup / agent
 | | |
@@ -81,7 +81,7 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 ## What we deliberately do NOT copy
 - **Keylogger** — recording keystrokes is a privacy/legal risk; left out.
 - **Stealth / hidden agent** — ours is transparent (the employee sees a notice).
-- **Remote control (mouse/keyboard)** — safety‑blocked; a separate class of tool.
+- **Silent/stealth remote control** — control is only ever done with a visible banner on the employee's screen, and only while Live view is on; it is never hidden.
 
 ## Our custom’s advantage over the original
 - Works **over the internet from anywhere** (the original needs the admin on the

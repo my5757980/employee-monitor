@@ -1,12 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
+# pynput loads its real backend lazily (pynput.mouse._win32, pynput.keyboard._win32),
+# so collect every submodule - otherwise remote control drops out of the built .exe.
+hidden = ['mss', 'PIL', 'PIL.ImageTk', 'psutil', 'tkinter', 'winsound', 'truststore']
+hidden += collect_submodules('pynput')
 
 a = Analysis(
     ['agent.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=['mss', 'PIL', 'PIL.ImageTk', 'psutil', 'tkinter', 'winsound'],
+    hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -2,7 +2,7 @@
 // Command-line setup for Employee Monitor. Run with the host's PHP.
 //
 //   php tool.php migrate                 create the database + tables (db/schema.sql)
-//   php tool.php admin <user> <pass> [name]   create / reset a dashboard login
+//   php tool.php admin <user> <pass> [name] [owner|manager]   create / reset a dashboard login
 //   php tool.php enroll [label]          make an enrollment key for one PC
 //   php tool.php cleanup                  delete screenshots older than retention_days
 //   php tool.php status                   quick counts
@@ -34,6 +34,18 @@ switch ($cmd) {
         // Create the tables inside the database itself.
         $ddl = preg_replace('/CREATE DATABASE[^;]+;|USE\s+[^;]+;/i', '', $sql);
         db()->exec($ddl);
+        // Add columns an older database does not have yet (safe to run again). recv_at is
+        // the server's own receipt time, used for "latest" and for cleanup, so a computer
+        // whose clock is wrong can neither hide its newest data nor have it deleted early.
+        $addcol = function (string $table, string $col, string $def): void {
+            $has = q1('SELECT COUNT(*) c FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', [$table, $col]);
+            if ((int) ($has['c'] ?? 0) === 0) {
+                db()->exec("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+            }
+        };
+        $addcol('screenshots', 'recv_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
+        $addcol('activity', 'recv_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
         echo "Database and tables ready.\n";
         break;
 
@@ -41,17 +53,21 @@ switch ($cmd) {
         $user = $argv[2] ?? '';
         $pass = $argv[3] ?? '';
         $name = $argv[4] ?? $user;
+        $role = strtolower($argv[5] ?? 'owner');
         if ($user === '' || $pass === '') {
-            exit("Usage: php tool.php admin <user> <pass> [name]\n");
+            exit("Usage: php tool.php admin <user> <pass> [name] [owner|manager]\n");
+        }
+        if (!in_array($role, ['owner', 'manager'], true)) {
+            exit("Role must be 'owner' (full control) or 'manager' (read-only).\n");
         }
         $hash = password_hash($pass, PASSWORD_DEFAULT);
         $exists = q1('SELECT id FROM admins WHERE username = ?', [$user]);
         if ($exists) {
-            x('UPDATE admins SET password_hash = ?, name = ? WHERE id = ?', [$hash, $name, $exists['id']]);
-            echo "Updated admin '$user'.\n";
+            x('UPDATE admins SET password_hash = ?, name = ?, role = ? WHERE id = ?', [$hash, $name, $role, $exists['id']]);
+            echo "Updated admin '$user' ($role).\n";
         } else {
-            x('INSERT INTO admins (username, password_hash, name, role) VALUES (?,?,?,?)', [$user, $hash, $name, 'owner']);
-            echo "Created admin '$user'.\n";
+            x('INSERT INTO admins (username, password_hash, name, role) VALUES (?,?,?,?)', [$user, $hash, $name, $role]);
+            echo "Created admin '$user' ($role).\n";
         }
         break;
 
@@ -63,7 +79,9 @@ switch ($cmd) {
 
     case 'cleanup':
         $days = em_config()['retention_days'];
-        $old  = q('SELECT id, path FROM screenshots WHERE ts < (NOW() - INTERVAL ? DAY)', [$days]);
+        // Delete by recv_at (when the server received it), not ts (the computer's clock),
+        // so a screenshot from a computer whose clock is behind is not wiped immediately.
+        $old  = q('SELECT id, path FROM screenshots WHERE recv_at < (NOW() - INTERVAL ? DAY)', [$days]);
         $base = em_config()['data_dir'] . '/shots/';
         foreach ($old as $row) {
             @unlink($base . $row['path']);
@@ -75,7 +93,7 @@ switch ($cmd) {
             $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $old));
             db()->exec("DELETE FROM screenshots WHERE id IN ($ids)");
         }
-        db()->exec('DELETE FROM activity WHERE ts < (NOW() - INTERVAL ' . (int) $days . ' DAY)');
+        db()->exec('DELETE FROM activity WHERE recv_at < (NOW() - INTERVAL ' . (int) $days . ' DAY)');
         // Old events and long-idle sessions are cleaned too, so those tables don't grow forever.
         db()->exec('DELETE FROM events WHERE ts < (NOW() - INTERVAL 30 DAY)');
         db()->exec('DELETE FROM admin_sessions WHERE last_seen < (NOW() - INTERVAL 14 DAY)');

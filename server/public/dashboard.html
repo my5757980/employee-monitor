@@ -383,7 +383,7 @@ async function refreshGrid() {
     const d = await api('/api/admin/devices');
     if (asked !== changes) return;
     applyDevices(d.devices);
-    saved.write({ at: Date.now(), name: $('#who').textContent, devices: d.devices, cameras_url: camUrl });
+    saved.write({ at: Date.now(), name: $('#who').textContent, role: myRole, devices: d.devices, cameras_url: camUrl });
   } catch (e) {
     if (e.status !== 401) setText($('#counts'), 'Reconnecting…');
   }
@@ -815,13 +815,15 @@ function startLive(id) {
   window.emStats = { firstFrameMs: null, frames: 0, mode: 'stream' };
   // Start listening before asking, so the first frame is drawn the moment it exists.
   liveLoop(L);
-  queueLive(L.id, '120', true);
+  extendLive(L.id, '120', true);
   paintLiveUI();
 }
 function stopLive(tellComputer) {
   const L = live;
   if (!L) return;
   live = null;
+  // Control cannot continue once the owner can no longer see the screen.
+  if (remoteOn) { sendRemote('remote_stop', ''); setRemoteUI(false); }
   L.ctrl.abort();
   // The computer stops sending frames now, not when its window runs out.
   if (tellComputer) api('/api/admin/command', postJson({ device_id: Number(L.id), type: 'live', payload: '0' })).catch(() => {});
@@ -984,7 +986,8 @@ function sendCommand(id, type, btn) {
 }
 function paintCommands() {
   localCmds = localCmds.filter(l => !l.id || !cmdRows.some(c => c.id === l.id));
-  const rows = localCmds.concat(cmdRows).filter(c => !(c.type === 'live' && String(c.payload) === '0'));
+  const INPUT = { mouse_move:1, mouse_click:1, mouse_scroll:1, key:1, remote_start:1, remote_stop:1 };
+  const rows = localCmds.concat(cmdRows).filter(c => !INPUT[c.type] && !(c.type === 'live' && String(c.payload) === '0'));
   setHtml($('#cmdList'), rows.map(c => {
     const color = c.status==='done'?'text-emerald-600':c.status==='failed'?'text-red-600':'text-slate-400';
     return `<div class="py-1 border-b flex gap-2">
@@ -1054,7 +1057,7 @@ async function openLog() {
   $('#logModal').classList.remove('hidden');
   const box = $('#logList');
   setHtml(box, SKELETON);
-  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note' };
+  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent' };
   try {
     const r = await api('/api/admin/events');
     if (!r.events.length) { setHtml(box, '<p class=\"text-slate-500 py-4 text-center\">Nothing yet.</p>'); return; }
@@ -1102,7 +1105,7 @@ async function camSave(url) {
   const d = await api('/api/admin/cameras', postJson({ url }));
   camUrl = d.url;
   paintCam();
-  saved.write({ at: Date.now(), name: $('#who').textContent, devices, cameras_url: camUrl });
+  saved.write({ at: Date.now(), name: $('#who').textContent, role: myRole, devices, cameras_url: camUrl });
 }
 $('#camSave').addEventListener('click', async () => {
   const url = $('#camUrl').value.trim();
@@ -1281,15 +1284,19 @@ function sendRemote(type, payload) {
   })).catch(() => {});
 }
 
+// Control is only live while the Live view is on this same computer, so a frozen
+// picture can never be clicked into, and closing Live ends control at once.
+function remoteActive() { return remoteOn && !!live && live.id === String(curId); }
+// Send the click point as a fraction of the picture (0..1), not as pixels: the
+// live frame is 1280 wide but the real screen may be any size, so the agent
+// multiplies the fraction by its own screen to land in the right place.
 function getImgCoords(e) {
   const img = $('#dShot');
   if (!img || !img.naturalWidth) return null;
   const rect = img.getBoundingClientRect();
-  const scaleX = img.naturalWidth / rect.width;
-  const scaleY = img.naturalHeight / rect.height;
-  const x = Math.round((e.clientX - rect.left) * scaleX);
-  const y = Math.round((e.clientY - rect.top) * scaleY);
-  return { x: Math.max(0, x), y: Math.max(0, y) };
+  const fx = (e.clientX - rect.left) / rect.width;
+  const fy = (e.clientY - rect.top) / rect.height;
+  return { x: Math.min(1, Math.max(0, fx)).toFixed(4), y: Math.min(1, Math.max(0, fy)).toFixed(4) };
 }
 
 // Take Control button
@@ -1311,7 +1318,7 @@ $('#remoteStop').addEventListener('click', () => {
 
 // Mouse events on the live image
 $('#dShot').addEventListener('mousemove', (e) => {
-  if (!remoteOn || !curId) return;
+  if (!remoteActive()) return;
   const now = Date.now();
   if (now - lastMoveSent < 80) return; // throttle (~12 moves/sec)
   lastMoveSent = now;
@@ -1320,21 +1327,20 @@ $('#dShot').addEventListener('mousemove', (e) => {
 });
 
 $('#dShot').addEventListener('mousedown', (e) => {
-  if (!remoteOn || !curId) return;
+  if (!remoteActive()) return;
   e.preventDefault();
   const c = getImgCoords(e);
-  if (c) {
-    sendRemote('mouse_move', c.x + ',' + c.y);
-    sendRemote('mouse_click', e.button === 2 ? 'right' : 'left');
-  }
+  // One command carries the point AND the click, so the move can never arrive
+  // after its own click (two separate requests have no fixed order).
+  if (c) sendRemote('mouse_click', (e.button === 2 ? 'right' : 'left') + ',' + c.x + ',' + c.y);
 });
 
 $('#dShot').addEventListener('contextmenu', (e) => {
-  if (remoteOn) e.preventDefault();
+  if (remoteActive()) e.preventDefault();
 });
 
 $('#dShot').addEventListener('wheel', (e) => {
-  if (!remoteOn || !curId) return;
+  if (!remoteActive()) return;
   e.preventDefault();
   const dy = e.deltaY > 0 ? -3 : 3;
   sendRemote('mouse_scroll', String(dy));
@@ -1342,7 +1348,7 @@ $('#dShot').addEventListener('wheel', (e) => {
 
 // Keyboard (only when control is active)
 document.addEventListener('keydown', (e) => {
-  if (!remoteOn || !curId) return;
+  if (!remoteActive()) return;
   // Don't capture when typing in inputs
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   e.preventDefault();

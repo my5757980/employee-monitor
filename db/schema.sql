@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE TABLE IF NOT EXISTS activity (
   id           BIGINT AUTO_INCREMENT PRIMARY KEY,
   device_id    INT NOT NULL,
-  ts           TIMESTAMP NOT NULL,
+  ts           TIMESTAMP NOT NULL,                 -- the computer's own clock (for display)
+  recv_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- when the server received it (for cleanup)
   active_app   VARCHAR(190) NOT NULL DEFAULT '',
   window_title VARCHAR(512) NOT NULL DEFAULT '',
   website      VARCHAR(255) NOT NULL DEFAULT '',
@@ -67,7 +68,8 @@ CREATE TABLE IF NOT EXISTS activity (
 CREATE TABLE IF NOT EXISTS screenshots (
   id        BIGINT AUTO_INCREMENT PRIMARY KEY,
   device_id INT NOT NULL,
-  ts        TIMESTAMP NOT NULL,
+  ts        TIMESTAMP NOT NULL,                    -- the computer's own clock (for display)
+  recv_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- when the server received it (for cleanup)
   path      VARCHAR(255) NOT NULL,
   w         INT NOT NULL DEFAULT 0,
   h         INT NOT NULL DEFAULT 0,

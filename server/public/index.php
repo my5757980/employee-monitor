@@ -78,8 +78,12 @@ function route(string $path, string $method, array $cfg): void
         // Read the signal BEFORE looking for actions: one queued right after the
         // look still changes the signal, so it wakes the wait below.
         $seen = sig_get($id, 'cmd');
-        x('UPDATE devices SET last_seen = NOW(), consent_ack = GREATEST(consent_ack, ?) WHERE id = ?',
-            [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $id]);
+        // Also keep the agent version current: it used to be stored only at enrol, so
+        // the console showed the old version for ever after an agent upgrade.
+        $ver = mb_substr($b['agent_version'] ?? '', 0, 32);
+        x("UPDATE devices SET last_seen = NOW(), consent_ack = GREATEST(consent_ack, ?),
+                  agent_version = CASE WHEN ? <> '' THEN ? ELSE agent_version END WHERE id = ?",
+            [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $ver, $ver, $id]);
         // Stale queued actions must not fire when a computer comes back much later
         // (a "Shut down" pressed while a PC was off would otherwise run next day).
         // Power actions expire after 5 minutes, anything else after an hour. Marked
@@ -88,6 +92,7 @@ function route(string $path, string $method, array $cfg): void
         x("UPDATE commands SET status = 'failed', result = 'expired: computer was offline too long', done_at = NOW()
            WHERE device_id = ? AND status = 'pending'
              AND ( (type IN ('logoff','restart','shutdown') AND created_at < NOW() - INTERVAL 5 MINUTE)
+                   OR (type IN ('mouse_move','mouse_click','mouse_scroll','key') AND created_at < NOW() - INTERVAL 45 SECOND)
                    OR created_at < NOW() - INTERVAL 60 MINUTE )", [$id]);
         // An action stays on offer until the computer reports on it. The agent runs what it
         // gets and reports before its next ping, so 'sent' with no report means the reply
@@ -96,7 +101,8 @@ function route(string $path, string $method, array $cfg): void
         // the owner can see it never said 'done'.
         $findCmds = fn () => q(
             "SELECT id, type, payload FROM commands WHERE device_id = ? AND (status = 'pending'
-               OR (status = 'sent' AND type NOT IN ('logoff', 'restart', 'shutdown')
+               OR (status = 'sent'
+                   AND type NOT IN ('logoff', 'restart', 'shutdown', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key')
                    AND created_at > NOW() - INTERVAL 180 SECOND))
              ORDER BY id", [$id]);
         $findPol  = fn () => q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$id]);
@@ -203,6 +209,12 @@ function route(string $path, string $method, array $cfg): void
         if (empty($_FILES['shot']['tmp_name']) || !is_uploaded_file($_FILES['shot']['tmp_name'])) {
             fail('No image.', 400);
         }
+        // Only a real JPEG is stored, so junk or a mislabelled file can never be kept
+        // and later handed back to the dashboard as if it were a screenshot.
+        $imgInfo = @getimagesize($_FILES['shot']['tmp_name']);
+        if (!$imgInfo || ($imgInfo[2] ?? 0) !== IMAGETYPE_JPEG) {
+            fail('Not a JPEG image.', 400);
+        }
         $cfg = em_config();
         $dir = $cfg['data_dir'] . '/shots/' . $dev['id'];
         if (!is_dir($dir)) {
@@ -228,7 +240,7 @@ function route(string $path, string $method, array $cfg): void
         $dev  = require_device();
         $b    = body();
         $apps = array_slice(array_values(array_filter(array_map(
-            fn ($a) => mb_substr(trim((string) $a), 0, 120), $b['apps'] ?? []))), 0, 80);
+            fn ($a) => mb_substr(trim((string) $a), 0, 120), $b['apps'] ?? []))), 0, 300);
         x('INSERT INTO device_procs (device_id, ts, apps) VALUES (?, NOW(), ?)
            ON DUPLICATE KEY UPDATE ts = NOW(), apps = VALUES(apps)',
             [$dev['id'], json_encode($apps, JSON_UNESCAPED_UNICODE)]);
@@ -286,15 +298,18 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/login' && $method === 'POST') {
         $b    = body();
         $user = trim($b['username'] ?? '');
-        // Rate limit: too many wrong tries for this username in a short window are
-        // refused, so the password can't be brute-forced.
-        $fails = (int) (q1("SELECT COUNT(*) c FROM events WHERE type = 'admin_login_fail' AND detail = ? AND ts > NOW() - INTERVAL 10 MINUTE", [$user])['c'] ?? 0);
-        if ($fails >= 8) {
+        $ip   = client_ip();
+        // Rate limit by where the tries come from, not by the username. Keying on the
+        // username let anyone lock a real account out just by guessing its name with
+        // wrong passwords; keying on the caller's address means a flood only blocks
+        // the flooder.
+        $fails = (int) (q1("SELECT COUNT(*) c FROM events WHERE type = 'admin_login_fail' AND detail LIKE ? AND ts > NOW() - INTERVAL 10 MINUTE", ['% @ ' . $ip])['c'] ?? 0);
+        if ($fails >= 15) {
             fail('Too many failed attempts. Please wait a few minutes and try again.', 429);
         }
         $a    = q1('SELECT * FROM admins WHERE username = ?', [$user]);
         if (!$a || !password_verify($b['password'] ?? '', $a['password_hash'])) {
-            log_event(null, 'admin_login_fail', $user);
+            log_event(null, 'admin_login_fail', $user . ' @ ' . $ip);
             fail('Wrong username or password.', 401);
         }
         $tok = token();
@@ -343,8 +358,11 @@ function route(string $path, string $method, array $cfg): void
             fail('Not found.', 404);
         }
         $dev['online']      = ($dev['ago'] !== null && $dev['ago'] < 180);
-        $dev['activity']    = q('SELECT ts, active_app, window_title, website, is_idle FROM activity WHERE device_id = ? ORDER BY ts DESC LIMIT 100', [$id]);
-        $dev['screenshots'] = q('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY ts DESC LIMIT 40', [$id]);
+        // Order by id (the order the server received them), not by ts (the computer's
+        // own clock): a computer whose clock is wrong must not push its newest frames
+        // out of view or freeze the grid on a future-dated one.
+        $dev['activity']    = q('SELECT ts, active_app, window_title, website, is_idle FROM activity WHERE device_id = ? ORDER BY id DESC LIMIT 100', [$id]);
+        $dev['screenshots'] = q('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY id DESC LIMIT 40', [$id]);
         // All four tabs in this one reply, so moving between tabs makes no trip.
         $dev['report']   = report_data($id, date('Y-m-d'));
         $dev['procs']    = procs_data($id);
@@ -358,7 +376,7 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/live' && $method === 'GET') {
         require_admin();
         $id   = (int) ($_GET['id'] ?? 0);
-        $shot = q1('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY ts DESC LIMIT 1', [$id]);
+        $shot = q1('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY id DESC LIMIT 1', [$id]);
         $dev  = q1('SELECT (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago FROM devices WHERE id = ?', [$id]);
         $ago  = $dev['ago'] ?? null;
         json_out(['ok' => true, 'shot' => $shot ?: null, 'ago' => $ago, 'online' => ($ago !== null && $ago < 180)]);
@@ -437,16 +455,20 @@ function route(string $path, string $method, array $cfg): void
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="report-' . $id . '-' . $day . '.csv"');
         $out = fopen('php://output', 'w');
-        fputcsv($out, ['Computer', ($dev['employee_name'] ?? '') ?: ($dev['hostname'] ?? ''), 'Date', $day]);
+        fwrite($out, "\xEF\xBB\xBF");   // UTF-8 mark, so Excel reads non-English names correctly
+        // An app or window title is set by whatever the employee ran, so it must never
+        // be treated as a live formula when the file is opened in a spreadsheet.
+        $safe = fn ($v) => (is_string($v) && $v !== '' && strpbrk($v[0], "=+-@\t\r") !== false) ? "'" . $v : $v;
+        fputcsv($out, ['Computer', $safe(($dev['employee_name'] ?? '') ?: ($dev['hostname'] ?? '')), 'Date', $day]);
         fputcsv($out, []);
         fputcsv($out, ['Application', 'Minutes', 'Idle minutes']);
         foreach ($apps as $a) {
-            fputcsv($out, [$a['active_app'], round($a['s'] * $sec / 60), round($a['i'] * $sec / 60)]);
+            fputcsv($out, [$safe($a['active_app']), round($a['s'] * $sec / 60), round($a['i'] * $sec / 60)]);
         }
         fputcsv($out, []);
         fputcsv($out, ['Website', 'Minutes']);
         foreach ($sites as $s) {
-            fputcsv($out, [$s['website'], round($s['s'] * $sec / 60)]);
+            fputcsv($out, [$safe($s['website']), round($s['s'] * $sec / 60)]);
         }
         fclose($out);
         exit;
@@ -489,18 +511,28 @@ function route(string $path, string $method, array $cfg): void
         $b    = body();
         $id   = (int) ($b['device_id'] ?? 0);
         $type = $b['type'] ?? '';
-        // Remote control commands added here
+        // Remote control (mouse + keyboard) rides the same queue. These high-rate input
+        // actions are kept out of the audit log and the "recent actions" list below.
         $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live', 'record',
                     'remote_start', 'remote_stop', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
+        $input   = ['remote_start', 'remote_stop', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
         if (!in_array($type, $allowed, true)) {
             fail('Unknown action.', 400);
+        }
+        $payload = mb_substr((string) ($b['payload'] ?? ''), 0, 1000);
+        // Live / record carry a count of seconds. A non-number used to reach the agent
+        // and stall its loop for minutes, so it is refused here.
+        if (($type === 'live' || $type === 'record') && !preg_match('/^\d{1,6}$/', trim($payload))) {
+            fail('That action needs a number of seconds.', 400);
         }
         if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
             fail('Not found.', 404);
         }
         $cid = x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
-            [$id, $type, mb_substr($b['payload'] ?? '', 0, 1000), $a['id']]);
-        log_event($id, 'command', $type . ' ' . ($b['payload'] ?? ''));
+            [$id, $type, $payload, $a['id']]);
+        if (!in_array($type, $input, true)) {
+            log_event($id, 'command', $type . ' ' . $payload . ' · by ' . ($a['name'] ?: $a['username']));
+        }
         sig_wake($id);
         json_out(['ok' => true, 'command_id' => $cid]);
     }
@@ -542,28 +574,20 @@ function route(string $path, string $method, array $cfg): void
             fail('Write a message, or add a picture or voice.', 400);
         }
 
-        $nid = x('INSERT INTO notices (body, scope, recipients, created_by) VALUES (?,?,?,?)',
-            [$text, $scope, count($targets), $a['id']]);
-        $dir = em_config()['data_dir'] . '/notices/' . $nid;
-        @mkdir($dir, 0775, true);
-
-        $image = '';
+        // Check the files BEFORE anything is written, so a bad picture or voice leaves
+        // no half-made notice row and no empty folder behind.
+        $imgExt = '';
         if ($hasImg) {
             if ((int) ($_FILES['image']['size'] ?? 0) > 6 * 1024 * 1024) {
                 fail('The picture is too large (max 6 MB).', 400);
             }
-            $info = @getimagesize($_FILES['image']['tmp_name']);
-            $ext  = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
-                     'image/webp' => 'webp'][$info['mime'] ?? ''] ?? '';
-            if (!$ext) {
+            $info   = @getimagesize($_FILES['image']['tmp_name']);
+            $imgExt = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif',
+                       'image/webp' => 'webp'][$info['mime'] ?? ''] ?? '';
+            if (!$imgExt) {
                 fail('That picture type is not supported (use JPG, PNG, GIF or WebP).', 400);
             }
-            $image = 'image.' . $ext;
-            if (!move_uploaded_file($_FILES['image']['tmp_name'], $dir . '/' . $image)) {
-                fail('Could not store the picture.', 500);
-            }
         }
-        $voice = '';
         if ($hasVoc) {
             if ((int) ($_FILES['voice']['size'] ?? 0) > 12 * 1024 * 1024) {
                 fail('The voice clip is too large (max 12 MB).', 400);
@@ -572,12 +596,27 @@ function route(string $path, string $method, array $cfg): void
             if (substr($head, 0, 4) !== 'RIFF' || substr($head, 8, 4) !== 'WAVE') {
                 fail('The voice clip must be a WAV recording.', 400);
             }
-            $voice = 'voice.wav';
-            if (!move_uploaded_file($_FILES['voice']['tmp_name'], $dir . '/' . $voice)) {
-                fail('Could not store the voice clip.', 500);
-            }
         }
-        if ($image !== '' || $voice !== '') {
+
+        $nid = x('INSERT INTO notices (body, scope, recipients, created_by) VALUES (?,?,?,?)',
+            [$text, $scope, count($targets), $a['id']]);
+        $image = '';
+        $voice = '';
+        if ($hasImg || $hasVoc) {
+            $dir = em_config()['data_dir'] . '/notices/' . $nid;
+            @mkdir($dir, 0775, true);
+            if ($hasImg) {
+                $image = 'image.' . $imgExt;
+                if (!move_uploaded_file($_FILES['image']['tmp_name'], $dir . '/' . $image)) {
+                    fail('Could not store the picture.', 500);
+                }
+            }
+            if ($hasVoc) {
+                $voice = 'voice.wav';
+                if (!move_uploaded_file($_FILES['voice']['tmp_name'], $dir . '/' . $voice)) {
+                    fail('Could not store the voice clip.', 500);
+                }
+            }
             x('UPDATE notices SET image = ?, voice = ? WHERE id = ?', [$image, $voice, $nid]);
         }
 
@@ -746,6 +785,16 @@ function route(string $path, string $method, array $cfg): void
             exit;
         }
         readfile($file);
+        exit;
+    }
+
+    // With the README's local run (`php -S ... index.php`) every path reaches this
+    // router, so serve the page's service worker by name. On a real Apache host the
+    // file exists and is served directly, so this never runs there.
+    if ($path === '/sw.js' && $method === 'GET') {
+        header('Content-Type: text/javascript; charset=utf-8');
+        header('Cache-Control: no-cache');
+        readfile(__DIR__ . '/sw.js');
         exit;
     }
 

@@ -61,9 +61,15 @@ try:
 except Exception:
     HAS_REMOTE = False
 
-AGENT_VERSION = "1.1.0"
+AGENT_VERSION = "1.2.0"
 IS_WIN = sys.platform.startswith("win")
 NO_DIALOG = False  # set by --no-dialog; prints notices instead of pop-ups (tests/services)
+
+# Remote control (mouse + keyboard) is only ever carried out while the owner is also
+# watching live, and while it is on the employee sees a clear banner on their screen.
+# The main loop keeps these up to date; run_command reads REMOTE_ACTIVE as the gate.
+remote_requested = False   # the owner pressed "Take Control" (cleared by Stop / closing live)
+REMOTE_ACTIVE = False      # remote_requested AND the owner is watching live right now
 
 # ----- where the agent keeps its config (server URL + this device's token) -----
 def config_path():
@@ -80,15 +86,40 @@ def log_path():
     return os.path.join(d, "agent.log")
 
 
+_last_log = {"msg": None, "n": 0}
+
+
 def log(*parts):
-    """Print and append to the agent's log file (the packaged exe has no console)."""
+    """Print and append to the agent's log file (the packaged exe has no console).
+    Keeps the file from growing without bound (rotates past ~2 MB), and collapses a
+    flood of identical lines - e.g. the same network error every couple of seconds -
+    so the log stays small and readable even over days offline."""
     msg = " ".join(str(p) for p in parts)
     try:
         print(msg)
     except Exception:
         pass
+    # Collapse repeats: write the first few, then only every 100th, noting the count.
+    if msg == _last_log["msg"]:
+        _last_log["n"] += 1
+        if _last_log["n"] > 3 and _last_log["n"] % 100 != 0:
+            return
+        if _last_log["n"] % 100 == 0:
+            msg = msg + "  (x%d)" % _last_log["n"]
+    else:
+        _last_log["msg"] = msg
+        _last_log["n"] = 1
     try:
-        with open(log_path(), "a", encoding="utf-8") as f:
+        path = log_path()
+        try:
+            if os.path.getsize(path) > 2 * 1024 * 1024:
+                old = path + ".old"
+                if os.path.exists(old):
+                    os.remove(old)
+                os.replace(path, old)
+        except OSError:
+            pass
+        with open(path, "a", encoding="utf-8") as f:
             f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
     except Exception:
         pass
@@ -156,7 +187,10 @@ def show_notice_rich(body, image_path=None, voice_path=None):
                     from PIL import Image, ImageTk
                     im = Image.open(image_path)
                     im.thumbnail((560, 420))
-                    photo = ImageTk.PhotoImage(im)
+                    # Tie the image to THIS window's interpreter. Without a master it binds
+                    # to a stale default root, so a second notice's picture fails to load
+                    # and the whole agent can crash (Tcl_AsyncDelete) when the first closes.
+                    photo = ImageTk.PhotoImage(im, master=win)
                     lbl = tk.Label(frm, image=photo)
                     lbl.image = photo                # keep a reference so it is not garbage-collected
                     lbl.pack(pady=(12, 0))
@@ -181,9 +215,95 @@ def show_notice_rich(body, image_path=None, voice_path=None):
         except Exception:
             show_notice("Message from your administrator:\n\n"
                         + (body or "(a picture or voice was sent)"), dialog=not NO_DIALOG)
+        finally:
+            # The picture and voice were downloaded to TEMP only to show this one notice;
+            # remove them now so they don't pile up on the computer for good.
+            for _p in (image_path, voice_path):
+                if _p:
+                    try:
+                        os.remove(_p)
+                    except OSError:
+                        pass
 
     threading.Thread(target=_run, daemon=True).start()
     return True
+
+
+# ----- remote control: screen coordinates, and the "being controlled" banner -----
+_banner = {"thread": None, "stop": None}
+
+
+def _screen_size():
+    if IS_WIN:
+        try:
+            u = ctypes.windll.user32
+            w, h = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+            if w and h:
+                return w, h
+        except Exception:
+            pass
+    return 1920, 1080
+
+
+def _to_xy(payload):
+    """'fx,fy' as fractions 0..1 of the screen -> absolute primary-screen pixels, so a
+    click lands in the right place whatever the real screen size is. An old absolute
+    'x,y' (values above 1) is still accepted."""
+    parts = payload.replace(" ", "").split(",")
+    a, b = float(parts[0]), float(parts[1])
+    if 0.0 <= a <= 1.0 and 0.0 <= b <= 1.0:
+        w, h = _screen_size()
+        return int(round(a * (w - 1))), int(round(b * (h - 1)))
+    return int(a), int(b)
+
+
+def set_control_banner(on):
+    """Show or hide a visible, always-on-top bar telling the employee that their computer
+    is being controlled. This product is transparent by design, so control is never
+    silent. Runs in its own thread; a plain text window, closed from that same thread."""
+    if on and not _banner["thread"]:
+        stop = threading.Event()
+
+        def _run():
+            try:
+                import tkinter as tk
+                win = tk.Tk()
+                win.overrideredirect(True)
+                win.attributes("-topmost", True)
+                try:
+                    win.attributes("-alpha", 0.92)
+                except Exception:
+                    pass
+                win.geometry("%dx34+0+0" % win.winfo_screenwidth())
+                win.configure(bg="#b91c1c")
+                tk.Label(win, text="●  Your administrator is viewing and controlling this computer.",
+                         bg="#b91c1c", fg="white", font=("Segoe UI", 11, "bold")).pack(fill="both", expand=True)
+
+                def check():
+                    if stop.is_set():
+                        try:
+                            win.destroy()
+                        except Exception:
+                            pass
+                        return
+                    win.after(200, check)
+
+                win.after(200, check)
+                win.mainloop()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        _banner["thread"] = t
+        _banner["stop"] = stop
+    elif not on and _banner["thread"]:
+        try:
+            _banner["stop"].set()
+        except Exception:
+            pass
+        _banner["thread"] = None
+        _banner["stop"] = None
 
 
 # ----- what is the user doing right now -----
@@ -289,7 +409,8 @@ class Server:
 
     def ping(self, consent_ack):
         r = self.s.post(self.base + "/api/agent/ping", timeout=30,
-                        headers=self._headers(), json={"consent_ack": consent_ack})
+                        headers=self._headers(),
+                        json={"consent_ack": consent_ack, "agent_version": AGENT_VERSION})
         r.raise_for_status()
         return r.json()
 
@@ -339,6 +460,7 @@ class Server:
 # ----- actions the admin can send -----
 def run_command(cmd, srv=None):
     """Returns (ok, result_text). 'live' is handled by the caller (timing)."""
+    global remote_requested
     t = cmd.get("type")
     payload = cmd.get("payload") or ""
     try:
@@ -369,7 +491,11 @@ def run_command(cmd, srv=None):
             args = ["shutdown", flag]
             if t != "logoff":
                 args += ["/t", "15", "/c", (payload or "Your administrator scheduled this.")[:120]]
-            subprocess.run(args, capture_output=True)
+            r = subprocess.run(args, capture_output=True, text=True)
+            if r.returncode != 0:
+                # Don't report success when Windows refused it (e.g. not allowed, or one
+                # is already scheduled), or the owner would think it worked.
+                return False, (r.stderr or r.stdout or ("exit %d" % r.returncode)).strip()[:150]
             return True, t + " scheduled"
         if t == "live":
             return True, "live"
@@ -377,66 +503,60 @@ def run_command(cmd, srv=None):
             # The caller (main loop) turns on dense recording when this returns ok.
             return True, "recording"
 
-        # ========== FULL REMOTE CONTROL (mouse + keyboard) ==========
+        # ========== REMOTE CONTROL (mouse + keyboard) ==========
+        # The owner asks for control; it only takes effect while the live view is on, and
+        # the employee sees a banner the whole time (both decided by the main loop).
         if t == "remote_start":
             if not HAS_REMOTE:
                 return False, "pynput not installed"
-            log("Remote control STARTED by admin")
+            remote_requested = True
+            log("Remote control requested by admin")
             return True, "remote started"
 
         if t == "remote_stop":
-            log("Remote control STOPPED by admin")
+            remote_requested = False
+            log("Remote control stopped by admin")
             return True, "remote stopped"
 
-        if t == "mouse_move":
+        if t in ("mouse_move", "mouse_click", "mouse_scroll", "key"):
             if not HAS_REMOTE:
                 return False, "pynput not installed"
+            if not REMOTE_ACTIVE:
+                # No silent control: input is ignored unless control is on AND the owner
+                # is watching live, so nothing ever moves behind the employee's back.
+                return False, "control not active"
             try:
-                parts = payload.replace(" ", "").split(",")
-                x, y = int(parts[0]), int(parts[1])
-                MouseController().position = (x, y)
-                return True, "moved"
-            except Exception as e:
-                return False, str(e)[:80]
-
-        if t == "mouse_click":
-            if not HAS_REMOTE:
-                return False, "pynput not installed"
-            try:
-                btn = Button.right if payload.strip().lower() == "right" else Button.left
-                MouseController().click(btn)
-                return True, "clicked"
-            except Exception as e:
-                return False, str(e)[:80]
-
-        if t == "mouse_scroll":
-            if not HAS_REMOTE:
-                return False, "pynput not installed"
-            try:
-                dy = int(payload or "0")
-                MouseController().scroll(0, dy)
-                return True, "scrolled"
-            except Exception as e:
-                return False, str(e)[:80]
-
-        if t == "key":
-            if not HAS_REMOTE:
-                return False, "pynput not installed"
-            try:
-                kb = KeyboardController()
-                special = {
-                    "enter": Key.enter, "tab": Key.tab, "esc": Key.esc,
-                    "escape": Key.esc, "backspace": Key.backspace,
-                    "delete": Key.delete, "up": Key.up, "down": Key.down,
-                    "left": Key.left, "right": Key.right,
-                    "ctrl": Key.ctrl, "alt": Key.alt, "shift": Key.shift,
-                    "space": Key.space, "home": Key.home, "end": Key.end,
-                    "pageup": Key.page_up, "pagedown": Key.page_down,
-                }
-                k = special.get(payload.strip().lower(), payload)
-                kb.press(k)
-                kb.release(k)
-                return True, "key sent"
+                if t == "mouse_move":
+                    x, y = _to_xy(payload)
+                    MouseController().position = (x, y)
+                    return True, "moved"
+                if t == "mouse_click":
+                    parts = payload.split(",")
+                    btn = Button.right if parts[0].strip().lower() == "right" else Button.left
+                    m = MouseController()
+                    if len(parts) >= 3:                              # the point rides with the
+                        x, y = _to_xy(parts[1] + "," + parts[2])     # click, so a move can never
+                        m.position = (x, y)                          # arrive after its own click
+                    m.click(btn)
+                    return True, "clicked"
+                if t == "mouse_scroll":
+                    MouseController().scroll(0, int(payload or "0"))
+                    return True, "scrolled"
+                if t == "key":
+                    kb = KeyboardController()
+                    special = {
+                        "enter": Key.enter, "tab": Key.tab, "esc": Key.esc,
+                        "escape": Key.esc, "backspace": Key.backspace,
+                        "delete": Key.delete, "up": Key.up, "down": Key.down,
+                        "left": Key.left, "right": Key.right,
+                        "ctrl": Key.ctrl, "alt": Key.alt, "shift": Key.shift,
+                        "space": Key.space, "home": Key.home, "end": Key.end,
+                        "pageup": Key.page_up, "pagedown": Key.page_down,
+                    }
+                    k = special.get(payload.strip().lower(), payload)
+                    kb.press(k)
+                    kb.release(k)
+                    return True, "key sent"
             except Exception as e:
                 return False, str(e)[:80]
 
@@ -451,6 +571,26 @@ MARK_BEGIN = "# >>> EmployeeMonitor blocked sites >>>"
 MARK_END = "# <<< EmployeeMonitor blocked sites <<<"
 _applied_sites = None
 _site_block_warned = False
+
+
+def _clean_domains(sites):
+    """Turn whatever the owner typed into plain host names the hosts file can use.
+    'https://www.youtube.com/watch?v=1' -> 'youtube.com', 'www.tiktok.com' -> 'tiktok.com'.
+    Entries that are not a domain are dropped; order is kept and duplicates removed."""
+    out, seen = [], set()
+    for s in sites:
+        d = (s or "").strip().lower()
+        if not d:
+            continue
+        d = re.sub(r"^[a-z]+://", "", d)   # drop a scheme (http:// https://)
+        d = d.split("/")[0].split("?")[0]  # drop any path or query
+        d = d.split(":")[0]                # drop a port
+        if d.startswith("www."):
+            d = d[4:]
+        if re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", d) and d not in seen:
+            seen.add(d)
+            out.append(d)
+    return out
 
 
 def running_apps():
@@ -505,7 +645,8 @@ def enforce_blocked_sites(sites):
     global _applied_sites, _site_block_warned
     if not IS_WIN:
         return
-    key = tuple(sorted(s.lower() for s in sites))
+    domains = _clean_domains(sites)
+    key = tuple(domains)
     if key == _applied_sites:
         return
     try:
@@ -515,8 +656,8 @@ def enforce_blocked_sites(sites):
         return
     stripped = re.sub(re.escape(MARK_BEGIN) + r".*?" + re.escape(MARK_END) + r"\n?", "", content, flags=re.S)
     block = ""
-    if sites:
-        rows = "".join("0.0.0.0 %s\n0.0.0.0 www.%s\n" % (d, d) for d in sites)
+    if domains:
+        rows = "".join("0.0.0.0 %s\n0.0.0.0 www.%s\n" % (d, d) for d in domains)
         block = MARK_BEGIN + "\n" + rows + MARK_END + "\n"
     new = stripped.rstrip() + "\n" + block
     if new == content:
@@ -555,7 +696,7 @@ def main():
     ap.add_argument("--once", action="store_true", help="send one sample and exit (for testing)")
     ap.add_argument("--no-dialog", action="store_true", help="print notices instead of pop-ups (tests/services)")
     args = ap.parse_args()
-    global NO_DIALOG
+    global NO_DIALOG, REMOTE_ACTIVE
     NO_DIALOG = args.no_dialog
 
     cfg = load_config()
@@ -601,10 +742,17 @@ def main():
     record_until = 0.0
     last_procs   = 0.0
     last_ping    = 0.0
+    removed      = False     # set when this computer has been taken off the dashboard
+    net_fail     = 0         # consecutive network failures, for backing off when offline
     log("Monitoring agent running. Sampling every %ss. (This computer is monitored for work.)" % interval)
 
     while True:
         now = time.time()
+        if removed:
+            # Taken off the dashboard: stay quiet (a real re-add is a fresh install with a
+            # new key, which replaces this process). No samples, no screenshots, no asking.
+            time.sleep(300)
+            continue
         try:
             live      = now < live_until
             recording = now < record_until
@@ -614,17 +762,33 @@ def main():
             if (not live) or (now - last_ping >= 1.0):
                 info = srv.ping(cfg.get("consent_ack", 1))
                 last_ping = now
+                net_fail = 0
                 if info.get("sample_seconds"):
                     interval = int(info["sample_seconds"])
 
                 # Actions the admin sent.
                 for cmd in info.get("commands", []):
+                    # Control counts only while the owner is watching live; recompute per
+                    # action so input in this same batch is gated right and the employee's
+                    # banner follows. A bad seconds value can no longer crash the loop.
+                    REMOTE_ACTIVE = remote_requested and (time.time() < live_until)
+                    set_control_banner(REMOTE_ACTIVE)
                     ok, result = run_command(cmd, srv)
                     if ok and cmd.get("type") == "live":
-                        live_until = now + int(cmd.get("payload") or 60)
+                        try:
+                            live_until = now + int(cmd.get("payload") or 60)
+                        except (TypeError, ValueError):
+                            live_until = now + 60
                     if ok and cmd.get("type") == "record":
-                        record_until = now + int(cmd.get("payload") or 5) * 60
+                        try:
+                            record_until = now + int(cmd.get("payload") or 5) * 60
+                        except (TypeError, ValueError):
+                            record_until = now + 5 * 60
                     srv.command_result(cmd["id"], ok, result)
+
+                # Control ends the instant live ends; keep the banner in step.
+                REMOTE_ACTIVE = remote_requested and (time.time() < live_until)
+                set_control_banner(REMOTE_ACTIVE)
 
                 # What this computer may not run / open.
                 pol = info.get("policy", {})
@@ -666,11 +830,33 @@ def main():
                     enroll_and_save(srv, cfg, base, args.key)
                     cfg["consent_ack"] = 1   # notice was already shown on this PC
                     save_config(cfg)
+                    net_fail = 0
+                except requests.HTTPError as e2:
+                    c2 = e2.response.status_code if e2.response is not None else 0
+                    if c2 == 403:
+                        # The key is spent: this computer was removed from the dashboard.
+                        # Stop asking for ever, lift any website blocks we applied, drop the
+                        # control banner, and go idle.
+                        log("This computer was removed from monitoring. Going idle.")
+                        try:
+                            enforce_blocked_sites([])
+                        except Exception:
+                            pass
+                        set_control_banner(False)
+                        removed = True
+                    else:
+                        log("re-enroll failed:", str(e2)[:120])
                 except Exception as e2:
                     log("re-enroll failed:", str(e2)[:120])
+            elif code == 401:
+                log("Session rejected (401) and no key to re-enrol; going idle.")
+                set_control_banner(False)
+                removed = True
             else:
+                net_fail += 1
                 log("network:", str(e)[:120])
         except requests.RequestException as e:
+            net_fail += 1
             log("network:", str(e)[:120])
         except Exception as e:
             log("error:", str(e)[:160])
@@ -678,8 +864,12 @@ def main():
         if args.once:
             break
         # Stream frames as fast as they upload while the admin watches, dense while
-        # recording (4s), otherwise just often enough to pick up actions (2s).
-        time.sleep(0.25 if now < live_until else (4 if now < record_until else 2))
+        # recording (4s), otherwise just often enough to pick up actions (2s). When the
+        # server can't be reached, back off so a computer left off all night barely stirs.
+        pause = 0.25 if now < live_until else (4 if now < record_until else 2)
+        if net_fail > 3:
+            pause = min(60, 2 ** min(net_fail, 6))
+        time.sleep(pause)
 
 
 if __name__ == "__main__":

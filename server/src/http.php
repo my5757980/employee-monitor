@@ -81,7 +81,45 @@ function require_owner(): array
     if (($a['role'] ?? '') !== 'owner') {
         fail('This action is only available to the owner account.', 403);
     }
+    same_origin_or_fail();
     return $a;
+}
+
+/** The caller's IP, trusting the one reverse proxy in front (Caddy/Apache) when it
+ * forwards it, so the login throttle counts real callers, not the proxy. */
+function client_ip(): string
+{
+    $fwd = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+    if ($fwd !== '') {
+        $first = trim(explode(',', $fwd)[0]);
+        if ($first !== '') {
+            return mb_substr($first, 0, 64);
+        }
+    }
+    return mb_substr($_SERVER['REMOTE_ADDR'] ?? '', 0, 64);
+}
+
+/** Refuse a state-changing request that another web site made in the owner's signed-in
+ * browser: its Origin (or Referer) host is not ours. Same-origin requests and non-browser
+ * callers (the agent, curl - no Origin/Referer) are unaffected. A second line of defence
+ * behind the SameSite=Lax cookie. */
+function same_origin_or_fail(): void
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        return;
+    }
+    $src = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($src === '' && !empty($_SERVER['HTTP_REFERER'])) {
+        $src = $_SERVER['HTTP_REFERER'];
+    }
+    if ($src === '') {
+        return;                       // no browser Origin/Referer to check
+    }
+    $host = parse_url($src, PHP_URL_HOST);
+    $me   = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? '');
+    if ($host === null || strcasecmp((string) $host, (string) $me) !== 0) {
+        fail('This request did not come from the dashboard.', 403);
+    }
 }
 
 /** Read the raw Authorization header no matter how the web server exposes it.
@@ -215,8 +253,10 @@ function device_rows(): array
                 (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago
          FROM devices WHERE active = 1 ORDER BY last_seen DESC'
     );
-    $shot = db()->prepare('SELECT path FROM screenshots WHERE device_id = ? ORDER BY ts DESC LIMIT 1');
-    $act  = db()->prepare('SELECT active_app, window_title, is_idle FROM activity WHERE device_id = ? ORDER BY ts DESC LIMIT 1');
+    // Order by id (the server's own receipt order), not ts (the computer's clock), so a
+    // computer with a wrong clock cannot freeze its tile on a stale or future frame.
+    $shot = db()->prepare('SELECT path FROM screenshots WHERE device_id = ? ORDER BY id DESC LIMIT 1');
+    $act  = db()->prepare('SELECT active_app, window_title, is_idle FROM activity WHERE device_id = ? ORDER BY id DESC LIMIT 1');
     foreach ($rows as &$r) {
         $shot->execute([$r['id']]);
         $s = $shot->fetch();
@@ -297,7 +337,11 @@ function policy_data(int $id): array
 
 function commands_data(int $id): array
 {
-    return q('SELECT id, type, payload, status, result, created_at, done_at FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 30', [$id]);
+    // Leave out the high-rate remote-control input, so it never floods the recent-actions list.
+    return q("SELECT id, type, payload, status, result, created_at, done_at FROM commands
+              WHERE device_id = ?
+                AND type NOT IN ('mouse_move','mouse_click','mouse_scroll','key','remote_start','remote_stop')
+              ORDER BY id DESC LIMIT 30", [$id]);
 }
 
 /** Make a width-capped JPEG copy of a screenshot for fast thumbnails and live
