@@ -6,6 +6,9 @@
   RewriteCond %{HTTP:Authorization} .
   RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+  # PHP's own settings file in this folder is not a page.
+  RewriteRule ^\.user\.ini$ - [F]
+
   # Every address that is not a real file here (/api/..., /) goes to index.php,
   # which routes it. Without this a plain Apache or cPanel host answers 404 for the
   # whole API. A server whose own configuration already says
