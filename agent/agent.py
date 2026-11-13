@@ -615,12 +615,17 @@ def _screen_size():
 #     was closed, the owner's network dropped) control ends by itself;
 #   - if the agent loses contact with the server, input is returned within a few seconds;
 #   - if the agent is closed or crashes, Windows restores input by itself;
-#   - Ctrl+Alt+Del always reaches Windows itself (lock, sign out, Task Manager). Windows
-#     lets go of the hold when it is pressed; the agent takes it again within a couple
-#     of seconds, for as long as the owner is in control.
+#   - Ctrl+Alt+Del always reaches Windows itself, and Windows lets go of the hold when
+#     it is pressed. The agent takes the hold again only while the owner is really
+#     working the computer (a click, a key or a mouse move from them in the last 20 s),
+#     and again with their next one. So with nobody active at the other end,
+#     Ctrl+Alt+Del is a way out - also for an owner who is trying control out on their
+#     own computer and so cannot reach their own Stop button.
 # Holding input needs administrator rights: for a Windows user without them the owner
 # still controls the computer, but the employee's own input is not held (the log says so).
 OWNER_GONE_SECONDS = 10
+OWNER_ACTIVE_SECONDS = 20
+_OWNER_ACTIONS = ("m", "d", "u", "c", "s", "k")      # what the owner does, as opposed to "still here"
 
 
 def block_input(on):
@@ -824,6 +829,7 @@ def _control_loop(srv, stop_event):
         log("control: started" + (", local input held." if blocked else
                                   " (could not hold local input - this Windows user is not an administrator)."))
         last_ok = last_owner = time.monotonic()
+        last_action = None                   # when the owner last clicked, typed or moved the mouse
         beats = False                        # this console sends heartbeats (older ones do not)
         while not stop_event.is_set():
             asked = time.monotonic()
@@ -850,10 +856,13 @@ def _control_loop(srv, stop_event):
                 last_owner = now
                 if not beats and any(isinstance(e, dict) and e.get("t") == "hb" for e in events):
                     beats = True
-            if IS_WIN:
-                # Take the hold again every time round. A network gap had let it go - or
-                # Windows did: it gives input back when Ctrl+Alt+Del is pressed. (Asking
-                # for a hold that is already there changes nothing.)
+                if any(isinstance(e, dict) and e.get("t") in _OWNER_ACTIONS for e in events):
+                    last_action = now
+            if IS_WIN and (not blocked or (last_action is not None and now - last_action < OWNER_ACTIVE_SECONDS)):
+                # Take the hold (again). A network gap had let it go - or Windows did: it
+                # gives input back when Ctrl+Alt+Del is pressed. After that it is taken
+                # again only while the owner is working the computer; see the note above.
+                # (Asking for a hold that is already there changes nothing.)
                 blocked = block_input(True) or blocked
             if _apply_events(events, hands) == "stop":
                 remote_requested = False             # tell the main loop control is over

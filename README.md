@@ -41,8 +41,12 @@ separate from anything else.
   get out. The employee sees a red bar the whole time and their own keyboard
   and mouse — built in or plugged in — are held. Control ends at once on Stop,
   when the live view or the owner's page is closed, and by itself within 10
-  seconds if the owner's page stops answering. (Ctrl+Alt+Del always reaches
-  Windows itself; the hold is taken again a moment later.)
+  seconds if the owner's page stops answering. Ctrl+Alt+Del always reaches
+  Windows itself and gives the employee their input back; the hold is taken
+  again only while the owner is actually working the computer (a click, key or
+  mouse move in the last 20 seconds). Trying control out on your **own**
+  computer freezes your own mouse: press Ctrl+Alt+Del, then Esc, then *Stop
+  Control*.
 - **Notice**: a message with an optional picture and voice clip, to one,
   several or all computers. A computer that is switched off shows it when it is
   next on (for up to 3 days).
