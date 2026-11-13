@@ -9,10 +9,10 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 | Net Monitor option | Our custom |
 |---|---|
 | Add a computer (host/IP, nickname, agent password, TCP port 4495) | ✅ “Add a computer” → an install key (works over the internet, no VPN) |
-| Connect automatically on start | ✅ agent auto-starts at logon |
+| Connect automatically on start | ✅ agent auto-starts at logon, for every user of the computer, and starts itself again if it ever stops |
 | Choose which monitor to show | ➖ (primary screen for now) |
 | Scan the LAN for agents / add a group of LAN computers | ➖ (we enroll by key instead; internet-ready) |
-| Organise computers into groups | ➖ can add |
+| Organise computers into groups | ✅ a group label per computer (Rename) |
 | RDP / Terminal Server multi-session | ➖ later |
 
 ## 2. See the screens (monitoring)
@@ -26,16 +26,16 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 |---|---|
 | Turn off / restart remote computers | ✅ shutdown / restart / log off |
 | Lock computer | ✅ |
-| Send a message / question | ✅ message |
+| Send a message / question | ✅ notice: text, picture and voice, to one / several / all; a computer that is off gets it when next on |
 | Open a web page on the remote computer | ➖ (left for now — “run something on the PC” is sensitive) |
 | Restrictions auto-applied at logon | ◑ blocks apply continuously |
 
 ## 4. Applications & processes
 | | |
 |---|---|
-| See running applications | ➖ can add (live list) |
+| See running applications | ✅ live list while watching (Apps tab) |
 | Block an application (auto-stopped if started) | ✅ blocked apps are killed |
-| See running processes and kill one | ➖ can add |
+| See running processes and kill one | ✅ “Stop” on the Apps tab closes it and keeps it blocked |
 
 ## 5. Desktop recorder
 | | |
@@ -60,14 +60,14 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 ## 9. Reporting & logging
 | | |
 |---|---|
-| Web browsing history | ◑ active window captured; true URL needs a browser add-on later |
-| Application usage logging | ✅ today’s report (minutes per app) |
-| Reports: top sites, details | ◑ today’s report; date filter/export ➖ can add |
+| Web browsing history | ◑ the site is named from the browser’s window title (well‑known sites, and titles that contain an address); the exact URL needs a browser add‑on later |
+| Application usage logging | ✅ a day’s report (minutes per app) |
+| Reports: top sites, details | ✅ a day’s report of applications and sites, for any date, with CSV export |
 | **Keylogger (keystrokes per app)** | ❌ **left out on purpose** (privacy/legal) |
-| Filter by computer / user / time; export to file | ➖ can add (CSV + date range) |
+| Filter by computer / user / time; export to file | ◑ per computer and per day, as CSV; a date range ➖ can add |
 
 ## 10. Remote control
-| Take over the remote mouse/keyboard | ✅ built, **transparent**: it works only while Live view is on, and the employee sees an on‑screen banner (“Your administrator is viewing and controlling this computer”) the whole time. Never silent. |
+| Take over the remote mouse/keyboard | ✅ built, **transparent**: it works only while Live view is on, the employee sees an on‑screen bar (“Your administrator is viewing and controlling this computer”) the whole time, and their own keyboard and mouse are held meanwhile. Clicks, dragging, the wheel, typing and shortcuts. It ends on Stop, when the live view or the owner’s page closes, and by itself if the owner’s page stops answering. If the bar cannot be shown, control is refused. Never silent. |
 
 ## 11. Setup / agent
 | | |
@@ -88,7 +88,9 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
   LAN or a VPN). The owner opens a web dashboard; no software on the owner’s side.
 
 ## Safe options we can still add to get closer to parity
-1. Live **running apps / processes** list, with “stop” per computer.
-2. Report **date range + CSV export**.
-3. **Groups** / rename computers; remove a computer.
-4. Thumbnail **refresh/size** settings.
+1. Choose **which monitor** to show (now: the primary screen).
+2. A report over a **date range** (now: one day at a time, with CSV).
+3. Thumbnail **refresh/size** settings.
+4. The **exact web address** of a page, through a browser add‑on (now: the site, from the window title).
+5. **MSI / Active Directory** install (now: `.exe` + `install.bat` per computer).
+6. A recording as an **MP4** file (now: stored frames with playback).

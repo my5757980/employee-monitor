@@ -7,7 +7,13 @@
 //   php tool.php cleanup                  delete screenshots older than retention_days
 //   php tool.php status                   quick counts
 //
-// Deploy note: set EM_DB_* / EM_DATA_DIR in the environment on the host.
+// Deploy note: set EM_DB_* / EM_DATA_DIR in the environment on the host (or in
+// config.local.php, see config.php).
+
+if (PHP_SAPI !== 'cli') {            // a set-up tool, never a web page
+    http_response_code(404);
+    exit;
+}
 
 require __DIR__ . '/src/db.php';
 require __DIR__ . '/src/http.php';
@@ -27,12 +33,15 @@ switch ($cmd) {
         $sql = file_get_contents(__DIR__ . '/../db/schema.sql');
         // Create the database if we have the privilege (local root). On a hosted
         // account the database already exists and the user can't CREATE DATABASE,
-        // so this is optional - ignore the failure.
-        if (preg_match('/CREATE DATABASE[^;]+;/i', $sql, $m)) {
-            try { connect_server()->exec($m[0]); } catch (Throwable $e) { /* already exists */ }
-        }
-        // Create the tables inside the database itself.
-        $ddl = preg_replace('/CREATE DATABASE[^;]+;|USE\s+[^;]+;/i', '', $sql);
+        // so this is optional - ignore the failure. The name is the configured one.
+        try {
+            connect_server()->exec('CREATE DATABASE IF NOT EXISTS `' . str_replace('`', '', $cfg['db']['name'])
+                . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        } catch (Throwable $e) { /* already exists, or not ours to create */ }
+        // Create the tables inside the database itself. Only whole statements that
+        // start a line are dropped, so a comment that happens to hold the word
+        // "use" can never take SQL away with it.
+        $ddl = preg_replace('/^\s*(CREATE DATABASE|USE)\b[^;]*;/mi', '', $sql);
         db()->exec($ddl);
         // Add columns an older database does not have yet (safe to run again). recv_at is
         // the server's own receipt time, used for "latest" and for cleanup, so a computer
@@ -46,6 +55,19 @@ switch ($cmd) {
         };
         $addcol('screenshots', 'recv_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
         $addcol('activity', 'recv_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
+        // Indexes an older database does not have yet. (device_id, id) answers "this
+        // computer's newest row" at once; without it the grid slows down as soon as
+        // one computer has been off for a while.
+        $addkey = function (string $table, string $name, string $cols): void {
+            $has = q1('SELECT COUNT(*) c FROM information_schema.STATISTICS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?', [$table, $name]);
+            if ((int) ($has['c'] ?? 0) === 0) {
+                db()->exec("ALTER TABLE `$table` ADD KEY `$name` ($cols)");
+            }
+        };
+        $addkey('screenshots', 'dev_latest', 'device_id, id');
+        $addkey('activity', 'dev_latest', 'device_id, id');
+        $addkey('events', 'type_ts', 'type, ts');
         echo "Database and tables ready.\n";
         break;
 
@@ -64,7 +86,10 @@ switch ($cmd) {
         $exists = q1('SELECT id FROM admins WHERE username = ?', [$user]);
         if ($exists) {
             x('UPDATE admins SET password_hash = ?, name = ?, role = ? WHERE id = ?', [$hash, $name, $role, $exists['id']]);
-            echo "Updated admin '$user' ($role).\n";
+            // A new password must end every sign-in made with the old one: whoever
+            // had the old password (or a browser left signed in) is out now.
+            x('DELETE FROM admin_sessions WHERE admin_id = ?', [$exists['id']]);
+            echo "Updated admin '$user' ($role). Everyone signed in as '$user' has been signed out.\n";
         } else {
             x('INSERT INTO admins (username, password_hash, name, role) VALUES (?,?,?,?)', [$user, $hash, $name, $role]);
             echo "Created admin '$user' ($role).\n";
@@ -78,51 +103,61 @@ switch ($cmd) {
         break;
 
     case 'cleanup':
-        $days = em_config()['retention_days'];
+        $days = (int) em_config()['retention_days'];
         // Delete by recv_at (when the server received it), not ts (the computer's clock),
         // so a screenshot from a computer whose clock is behind is not wiped immediately.
-        $old  = q('SELECT id, path FROM screenshots WHERE recv_at < (NOW() - INTERVAL ? DAY)', [$days]);
-        $base = em_config()['data_dir'] . '/shots/';
-        foreach ($old as $row) {
-            @unlink($base . $row['path']);
-            @unlink($base . $row['path'] . '.360.jpg');   // cached thumbnails
-            @unlink($base . $row['path'] . '.1280.jpg');
-            @unlink($base . $row['path'] . '.960.jpg');   // old size, clean up any left over
-        }
-        if ($old) {
-            $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $old));
-            db()->exec("DELETE FROM screenshots WHERE id IN ($ids)");
-        }
-        db()->exec('DELETE FROM activity WHERE recv_at < (NOW() - INTERVAL ' . (int) $days . ' DAY)');
+        // In batches, so the first cleanup after a long time cannot run out of memory.
+        $base  = em_config()['data_dir'] . '/shots/';
+        $gone  = 0;
+        do {
+            $old = q('SELECT id, path FROM screenshots WHERE recv_at < (NOW() - INTERVAL ? DAY) LIMIT 2000', [$days]);
+            foreach ($old as $row) {
+                shot_unlink($base . $row['path']);
+            }
+            if ($old) {
+                $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $old));
+                db()->exec("DELETE FROM screenshots WHERE id IN ($ids)");
+                $gone += count($old);
+            }
+        } while (count($old) === 2000);
+        db()->exec('DELETE FROM activity WHERE recv_at < (NOW() - INTERVAL ' . $days . ' DAY)');
         // Old events and long-idle sessions are cleaned too, so those tables don't grow forever.
         db()->exec('DELETE FROM events WHERE ts < (NOW() - INTERVAL 30 DAY)');
         db()->exec('DELETE FROM admin_sessions WHERE last_seen < (NOW() - INTERVAL 14 DAY)');
         // Old actions are cleared too, so the commands table cannot grow without bound.
         db()->exec('DELETE FROM commands WHERE created_at < (NOW() - INTERVAL 30 DAY)');
 
+        // Notices older than that have reached every computer they ever will: remove
+        // their picture and voice (up to 18 MB each) and the notice itself.
+        $ndir  = em_config()['data_dir'] . '/notices/';
+        $ngone = 0;
+        foreach (q('SELECT id FROM notices WHERE created_at < (NOW() - INTERVAL 30 DAY)') as $row) {
+            $dir = $ndir . (int) $row['id'];
+            foreach ((array) @glob($dir . '/*') as $f) {
+                @unlink($f);
+            }
+            @rmdir($dir);
+            $ngone++;
+        }
+        db()->exec('DELETE FROM notices WHERE created_at < (NOW() - INTERVAL 30 DAY)');
+
+        // Passing live frames (shown, not kept) that were still on disk when a live
+        // view ended: nothing reads them any more.
+        $tgone = 0;
+        foreach ((array) @glob($base . '*/t_*.jpg') as $f) {
+            if (@filemtime($f) < time() - 3600 && @unlink($f)) {
+                $tgone++;
+            }
+        }
+
         // Disk guard: whatever the retention setting, never let the screenshots disk
         // fill up. If free space is low, delete the oldest screenshots (across all
-        // computers) in batches until there is room again.
-        $dir     = em_config()['data_dir'];
-        $minFree = 600 * 1024 * 1024;   // keep ~600 MB free
-        $freed   = 0;
-        clearstatcache();
-        while (($free = @disk_free_space($dir)) !== false && $free < $minFree && $freed <= 200000) {
-            $batch = q('SELECT id, path FROM screenshots ORDER BY ts ASC LIMIT 500');
-            if (!$batch) {
-                break;
-            }
-            foreach ($batch as $row) {
-                @unlink($base . $row['path']);
-                @unlink($base . $row['path'] . '.360.jpg');
-                @unlink($base . $row['path'] . '.1280.jpg');
-            }
-            $ids = implode(',', array_map(fn ($r) => (int) $r['id'], $batch));
-            db()->exec("DELETE FROM screenshots WHERE id IN ($ids)");
-            $freed += count($batch);
-            clearstatcache();
+        // computers) in batches until there is room again (~600 MB free).
+        $freed = disk_guard(600 * 1024 * 1024);
+        echo "Removed $gone old screenshots and old activity.\n";
+        if ($ngone || $tgone) {
+            echo "Also removed $ngone old notices and $tgone left-over live frames.\n";
         }
-        echo 'Removed ' . count($old) . " old screenshots and old activity.\n";
         if ($freed) {
             echo "Disk guard: removed $freed more oldest screenshots to keep the disk from filling.\n";
         }
@@ -133,8 +168,13 @@ switch ($cmd) {
         echo 'Devices:     ' . (q1('SELECT COUNT(*) c FROM devices')['c'] ?? 0) . "\n";
         echo 'Activity:    ' . (q1('SELECT COUNT(*) c FROM activity')['c'] ?? 0) . "\n";
         echo 'Screenshots: ' . (q1('SELECT COUNT(*) c FROM screenshots')['c'] ?? 0) . "\n";
+        $free = @disk_free_space(em_config()['data_dir']);
+        if ($free !== false) {
+            echo 'Disk free:   ' . round($free / 1048576) . " MB (pictures folder)\n";
+        }
+        echo 'Time zone:   ' . date_default_timezone_get() . ' (' . date('P') . ")\n";
         break;
 
     default:
-        echo "Commands: migrate | admin <user> <pass> [name] | enroll [label] | cleanup | status\n";
+        echo "Commands: migrate | admin <user> <pass> [name] [owner|manager] | enroll [label] | cleanup | status\n";
 }

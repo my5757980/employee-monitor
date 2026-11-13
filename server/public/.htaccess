@@ -5,6 +5,13 @@
   RewriteEngine On
   RewriteCond %{HTTP:Authorization} .
   RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+  # Every address that is not a real file here (/api/..., /) goes to index.php,
+  # which routes it. Without this a plain Apache or cPanel host answers 404 for the
+  # whole API. A server whose own configuration already says
+  # "FallbackResource /index.php" behaves the same with or without these lines.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ index.php [L]
 </IfModule>
 
 # Belt and suspenders for Apache 2.4.13+ (mod_php honours this too).

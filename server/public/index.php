@@ -67,6 +67,7 @@ function route(string $path, string $method, array $cfg): void
             'device_token'   => $deviceToken,
             'device_id'      => $id,
             'sample_seconds' => $cfg['sample_seconds'],
+            'idle_seconds'   => $cfg['idle_seconds'],
             'consent_notice' => $cfg['consent_notice'],
         ]);
     }
@@ -86,14 +87,19 @@ function route(string $path, string $method, array $cfg): void
             [isset($b['consent_ack']) ? (int) $b['consent_ack'] : 0, $ver, $ver, $id]);
         // Stale queued actions must not fire when a computer comes back much later
         // (a "Shut down" pressed while a PC was off would otherwise run next day).
-        // Power actions expire after 5 minutes, anything else after an hour. Marked
-        // 'failed' (the status enum has no 'expired') with the reason, so the owner
-        // can see it never ran.
+        // Power actions, live view, recording and remote control expire after 5 minutes:
+        // they only make sense while the owner is there. A notice is the opposite - it is
+        // meant to be read when the computer is next on - so it waits for days.
+        // Anything else expires after an hour. Marked 'failed' (the status enum has
+        // no 'expired') with the reason, so the owner can see it never ran.
         x("UPDATE commands SET status = 'failed', result = 'expired: computer was offline too long', done_at = NOW()
            WHERE device_id = ? AND status = 'pending'
-             AND ( (type IN ('logoff','restart','shutdown') AND created_at < NOW() - INTERVAL 5 MINUTE)
+             AND ( (type IN ('logoff','restart','shutdown','live','record','remote_start','remote_stop')
+                        AND created_at < NOW() - INTERVAL 5 MINUTE)
                    OR (type IN ('mouse_move','mouse_click','mouse_scroll','key') AND created_at < NOW() - INTERVAL 45 SECOND)
-                   OR created_at < NOW() - INTERVAL 60 MINUTE )", [$id]);
+                   OR (type IN ('notice','message') AND created_at < NOW() - INTERVAL ? HOUR)
+                   OR (type NOT IN ('notice','message') AND created_at < NOW() - INTERVAL 60 MINUTE) )",
+            [$id, max(1, (int) $cfg['notice_hours'])]);
         // An action stays on offer until the computer reports on it. The agent runs what it
         // gets and reports before its next ping, so 'sent' with no report means the reply
         // never reached it (it dropped off while its ping was waiting). Recent ones only, and
@@ -116,6 +122,12 @@ function route(string $path, string $method, array $cfg): void
             sig_put($id, 'hold', (string) (time() + $hold));
             db_close();
             header('Content-Type: application/json; charset=utf-8');
+            // With PHP's output buffer on (many hosts' default) the spaces below would
+            // sit in it and never reach the wire, so a computer that has gone would not
+            // be noticed. Open the buffers so each one is really sent.
+            while (ob_get_level() > 0) {
+                ob_end_flush();
+            }
             $sigFile = sig_file($id, 'cmd');
             $end  = microtime(true) + $hold;
             $beat = microtime(true);
@@ -150,6 +162,12 @@ function route(string $path, string $method, array $cfg): void
                 if ($c['type'] === 'live') {
                     $secs = $c['payload'] === '' ? 60 : (int) $c['payload'];
                     sig_put($id, 'live', (string) ($secs > 0 ? time() + $secs + 5 : 0));
+                } elseif ($c['type'] === 'remote_start') {
+                    // Control includes watching: the computer starts sending frames on
+                    // this action even if the "live" one has not reached it yet.
+                    if ((int) sig_get($id, 'live') < time() + 125) {
+                        sig_put($id, 'live', (string) (time() + 125));
+                    }
                 } elseif ($c['type'] === 'record') {
                     sig_put($id, 'rec', (string) (time() + ($c['payload'] === '' ? 5 : (int) $c['payload']) * 60 + 5));
                 }
@@ -159,11 +177,12 @@ function route(string $path, string $method, array $cfg): void
         json_out([
             'ok'             => true,
             'sample_seconds' => $cfg['sample_seconds'],
+            'idle_seconds'   => $cfg['idle_seconds'],
             'consent_notice' => $cfg['consent_notice'],
             'commands'       => $cmds,
             'policy'         => [
                 'blocked_sites' => lines($pol['blocked_sites'] ?? ''),
-                'blocked_apps'  => lines($pol['blocked_apps'] ?? ''),
+                'blocked_apps'  => blocked_apps_for_agent($pol['blocked_apps'] ?? ''),
             ],
         ]);
     }
@@ -173,8 +192,11 @@ function route(string $path, string $method, array $cfg): void
         $b   = body();
         $id  = (int) ($b['id'] ?? 0);
         $ok  = !empty($b['ok']);
-        x('UPDATE commands SET status = ?, result = ?, done_at = NOW() WHERE id = ? AND device_id = ?',
-            [$ok ? 'done' : 'failed', mb_substr($b['result'] ?? '', 0, 255), $id, $dev['id']]);
+        // Not a row that is waiting again: a live view kept open is offered anew under
+        // the same id, and a report on its earlier run must not mark that as done.
+        x("UPDATE commands SET status = ?, result = ?, done_at = NOW()
+           WHERE id = ? AND device_id = ? AND status <> 'pending'",
+            [$ok ? 'done' : 'failed', mb_substr((string) ($b['result'] ?? ''), 0, 255), $id, $dev['id']]);
         json_out(['ok' => true]);
     }
 
@@ -183,22 +205,28 @@ function route(string $path, string $method, array $cfg): void
         $b       = body();
         $samples = $b['samples'] ?? [$b];     // one sample, or a batch
         $n = 0;
-        foreach ($samples as $s) {
-            if (!is_array($s)) {
+        foreach (is_array($samples) ? $samples : [] as $s) {
+            // A body that could not be read arrives as an empty array: that is not a
+            // sample, and must not be stored as a blank row.
+            if (!is_array($s) || (!isset($s['ts']) && !isset($s['active_app']) && !isset($s['window_title']))) {
                 continue;
             }
-            $ts = isset($s['ts']) ? date('Y-m-d H:i:s', (int) $s['ts']) : date('Y-m-d H:i:s');
+            $ts    = isset($s['ts']) ? date('Y-m-d H:i:s', (int) $s['ts']) : date('Y-m-d H:i:s');
+            $app   = mb_substr((string) ($s['active_app'] ?? ''), 0, 190);
+            $title = mb_substr((string) ($s['window_title'] ?? ''), 0, 512);
+            // The agent does not know the address a browser is on; name the site from
+            // the window title where it is one we can recognise.
+            $site  = (string) ($s['website'] ?? '');
+            if ($site === '') {
+                $site = site_from_title($app, $title);
+            }
             x('INSERT INTO activity (device_id, ts, active_app, window_title, website, is_idle)
                VALUES (?,?,?,?,?,?)',
-                [
-                    $dev['id'], $ts,
-                    mb_substr($s['active_app'] ?? '', 0, 190),
-                    mb_substr($s['window_title'] ?? '', 0, 512),
-                    mb_substr($s['website'] ?? '', 0, 255),
-                    !empty($s['is_idle']) ? 1 : 0,
-                ]);
+                [$dev['id'], $ts, $app, $title, mb_substr($site, 0, 255), !empty($s['is_idle']) ? 1 : 0]);
             $n++;
         }
+        // Answer 'ok' even when nothing could be stored: the computer has done its
+        // part, and an error here would only make it send the same body again.
         x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$dev['id']]);
         sig_put((int) $dev['id'], 'sample', (string) time());
         json_out(['ok' => true, 'saved' => $n]);
@@ -216,23 +244,52 @@ function route(string $path, string $method, array $cfg): void
             fail('Not a JPEG image.', 400);
         }
         $cfg = em_config();
-        $dir = $cfg['data_dir'] . '/shots/' . $dev['id'];
+        $id  = (int) $dev['id'];
+        $dir = $cfg['data_dir'] . '/shots/' . $id;
         if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
+            @mkdir($dir, 0775, true);
+        }
+        // Keep the disk from filling between the nightly cleanups: when space runs
+        // low, make room now by dropping the oldest pictures (at most once a minute).
+        $free = @disk_free_space($cfg['data_dir']);
+        if ($free !== false && $free < 300 * 1024 * 1024 && (int) sig_get(0, 'guard') < time() - 60) {
+            sig_put(0, 'guard', (string) time());
+            disk_guard(400 * 1024 * 1024, 4);
         }
         $ts   = isset($_POST['ts']) ? (int) $_POST['ts'] : time();
-        $name = date('Ymd_His', $ts) . '_' . substr(token(3), 0, 6) . '.jpg';
+        $when = date('Y-m-d H:i:s', $ts);
+        // A frame sent for the owner's live view is always shown, but only one in every
+        // few seconds is kept as history. The others are "passing" frames: a file the
+        // live view reads, no database row, deleted again a few frames later.
+        // The agent marks its live frames ('live'). One installed before that mark
+        // existed sends none, so a live view that is on right now counts as well.
+        $isLive    = !empty($_POST['live']) || (int) sig_get($id, 'live') > time();
+        $keepEvery = (int) $cfg['live_keep_seconds'];
+        if ($keepEvery > 4 && (int) sig_get($id, 'rec') > time()) {
+            $keepEvery = 4;                                        // a recording keeps a frame every 4 seconds
+        }
+        $kept      = explode(' ', sig_get($id, 'livekept'));       // "<time> <screenshot id>"
+        $passing   = $isLive && $keepEvery > 0 && (time() - (int) $kept[0]) < $keepEvery;
+        $name = ($passing ? 't_' : '') . date('Ymd_His', $ts) . '_' . substr(token(3), 0, 6) . '.jpg';
         $full = $dir . '/' . $name;
         if (!move_uploaded_file($_FILES['shot']['tmp_name'], $full)) {
             fail('Could not store image.', 500);
         }
-        $shotId = x('INSERT INTO screenshots (device_id, ts, path, w, h) VALUES (?,?,?,?,?)',
-            [$dev['id'], date('Y-m-d H:i:s', $ts), $dev['id'] . '/' . $name,
-             (int) ($_POST['w'] ?? 0), (int) ($_POST['h'] ?? 0)]);
-        x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$dev['id']]);
-        sig_put((int) $dev['id'], 'frame', json_encode(
-            ['id' => $shotId, 'ts' => date('Y-m-d H:i:s', $ts), 'path' => $dev['id'] . '/' . $name],
-            JSON_UNESCAPED_SLASHES));
+        if ($passing) {
+            live_frame_remember($id, $dir, $name);
+            $frame = ['id' => (int) ($kept[1] ?? 0), 'ts' => $when, 'path' => $id . '/' . $name, 't' => 1];
+        } else {
+            $shotId = x('INSERT INTO screenshots (device_id, ts, path, w, h) VALUES (?,?,?,?,?)',
+                [$id, $when, $id . '/' . $name, (int) ($_POST['w'] ?? 0), (int) ($_POST['h'] ?? 0)]);
+            if ($isLive) {
+                sig_put($id, 'livekept', time() . ' ' . $shotId);
+            }
+            $frame = ['id' => $shotId, 'ts' => $when, 'path' => $id . '/' . $name];
+        }
+        x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$id]);
+        // 'seq' makes every frame's signal different, so the live view sees each one.
+        $frame['seq'] = (int) round(microtime(true) * 1000);
+        sig_put($id, 'frame', json_encode($frame, JSON_UNESCAPED_SLASHES));
         json_out(['ok' => true]);
     }
 
@@ -322,7 +379,7 @@ function route(string $path, string $method, array $cfg): void
             'secure'   => $secure,
             'samesite' => 'Lax',
         ]);
-        log_event(null, 'admin_login', $user);
+        log_event(null, 'admin_login', $user . ' @ ' . $ip);
         json_out(boot_payload($a));
     }
 
@@ -361,8 +418,8 @@ function route(string $path, string $method, array $cfg): void
         // Order by id (the order the server received them), not by ts (the computer's
         // own clock): a computer whose clock is wrong must not push its newest frames
         // out of view or freeze the grid on a future-dated one.
-        $dev['activity']    = q('SELECT ts, active_app, window_title, website, is_idle FROM activity WHERE device_id = ? ORDER BY id DESC LIMIT 100', [$id]);
-        $dev['screenshots'] = q('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY id DESC LIMIT 40', [$id]);
+        $dev['activity']    = latest_rows('activity', 'ts, active_app, window_title, website, is_idle', $id, 100);
+        $dev['screenshots'] = latest_rows('screenshots', 'id, ts, path', $id, 40);
         // All four tabs in this one reply, so moving between tabs makes no trip.
         $dev['report']   = report_data($id, date('Y-m-d'));
         $dev['procs']    = procs_data($id);
@@ -376,7 +433,16 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/live' && $method === 'GET') {
         require_admin();
         $id   = (int) ($_GET['id'] ?? 0);
-        $shot = q1('SELECT id, ts, path FROM screenshots WHERE device_id = ? ORDER BY id DESC LIMIT 1', [$id]);
+        $shot = latest_rows('screenshots', 'id, ts, path', $id, 1)[0] ?? null;
+        // While frames are flowing the newest one may be a passing frame, which has no
+        // row: take it from the same signal the live stream reads.
+        $sig = sig_file($id, 'frame');
+        if (is_file($sig) && time() - (int) @filemtime($sig) <= 5) {
+            $f = json_decode((string) @file_get_contents($sig), true);
+            if (is_array($f) && !empty($f['t']) && is_string($f['path'] ?? null)) {
+                $shot = ['id' => (int) ($f['id'] ?? 0), 'ts' => (string) ($f['ts'] ?? ''), 'path' => $f['path']];
+            }
+        }
         $dev  = q1('SELECT (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago FROM devices WHERE id = ?', [$id]);
         $ago  = $dev['ago'] ?? null;
         json_out(['ok' => true, 'shot' => $shot ?: null, 'ago' => $ago, 'online' => ($ago !== null && $ago < 180)]);
@@ -391,6 +457,11 @@ function route(string $path, string $method, array $cfg): void
         require_admin();
         $id    = (int) ($_GET['id'] ?? 0);
         $after = (int) ($_GET['after'] ?? 0);
+        // One process for every request (the README's local run): an open stream would
+        // make everything else wait. Say no, and the page goes to its small poll.
+        if (single_worker()) {
+            fail('Live stream is off on a one-worker server.', 503);
+        }
         db_close();                                // only files from here on
         while (ob_get_level() > 0) {
             ob_end_clean();
@@ -416,10 +487,15 @@ function route(string $path, string $method, array $cfg): void
             if ($raw !== '' && $raw !== $last) {
                 $last = $raw;
                 $f = json_decode($raw, true);
-                if (is_array($f) && (int) ($f['id'] ?? 0) > $after && is_string($f['path'] ?? null)) {
+                // A kept frame is sent once (its id is newer than what the page has).
+                // A passing frame ('t') has no id of its own, and is always new.
+                $passing = is_array($f) && !empty($f['t']);
+                if (is_array($f) && is_string($f['path'] ?? null) && ($passing || (int) ($f['id'] ?? 0) > $after)) {
                     $img = @file_get_contents($base . $f['path']);
                     if ($img !== false) {
-                        $after = (int) $f['id'];
+                        if (!$passing) {
+                            $after = (int) $f['id'];
+                        }
                         $send($f, $img);
                         $beat = time();
                     }
@@ -475,23 +551,47 @@ function route(string $path, string $method, array $cfg): void
     }
 
     if ($path === '/api/admin/enroll-key' && $method === 'POST') {
-        require_owner();
-        $b    = body();
-        $code = enroll_code();
-        x('INSERT INTO enroll_keys (enroll_key, label) VALUES (?,?)', [$code, mb_substr($b['label'] ?? '', 0, 128)]);
+        $a     = require_owner();
+        $b     = body();
+        $code  = enroll_code();
+        $label = mb_substr((string) ($b['label'] ?? ''), 0, 128);
+        x('INSERT INTO enroll_keys (enroll_key, label, created_by) VALUES (?,?,?)', [$code, $label, $a['id']]);
+        log_event(null, 'enroll_key', 'made' . ($label !== '' ? ' for "' . $label . '"' : '') . ' · by ' . ($a['name'] ?: $a['username']));
         json_out(['ok' => true, 'enroll_key' => $code]);
+    }
+
+    // The install keys that have not been used yet. A key is a standing invitation to
+    // add a computer, so the owner can see them again and cancel one.
+    if ($path === '/api/admin/enroll-keys' && $method === 'GET') {
+        require_owner();
+        json_out(['ok' => true, 'keys' => q(
+            'SELECT id, enroll_key, label, created_at FROM enroll_keys WHERE used_by IS NULL ORDER BY id DESC LIMIT 100')]);
+    }
+    if ($path === '/api/admin/enroll-key-remove' && $method === 'POST') {
+        $a  = require_owner();
+        $b  = body();
+        $id = (int) ($b['id'] ?? 0);
+        $k  = q1('SELECT label FROM enroll_keys WHERE id = ? AND used_by IS NULL', [$id]);
+        if (!$k) {
+            fail('Not found.', 404);
+        }
+        x('DELETE FROM enroll_keys WHERE id = ? AND used_by IS NULL', [$id]);
+        log_event(null, 'enroll_key', 'cancelled' . ($k['label'] !== '' ? ' "' . $k['label'] . '"' : '') . ' · by ' . ($a['name'] ?: $a['username']));
+        json_out(['ok' => true]);
     }
 
     // Rename a computer / set its group.
     if ($path === '/api/admin/device-update' && $method === 'POST') {
-        require_owner();
+        $a  = require_owner();
         $b  = body();
         $id = (int) ($b['id'] ?? 0);
         if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
             fail('Not found.', 404);
         }
-        x('UPDATE devices SET employee_name = ?, group_name = ? WHERE id = ?',
-            [mb_substr($b['employee_name'] ?? '', 0, 190), mb_substr($b['group_name'] ?? '', 0, 190), $id]);
+        $name  = mb_substr((string) ($b['employee_name'] ?? ''), 0, 190);
+        $group = mb_substr((string) ($b['group_name'] ?? ''), 0, 190);
+        x('UPDATE devices SET employee_name = ?, group_name = ? WHERE id = ?', [$name, $group, $id]);
+        log_event($id, 'device_renamed', $name . ($group !== '' ? ' [' . $group . ']' : '') . ' · by ' . ($a['name'] ?: $a['username']));
         json_out(['ok' => true]);
     }
 
@@ -511,27 +611,55 @@ function route(string $path, string $method, array $cfg): void
         $b    = body();
         $id   = (int) ($b['device_id'] ?? 0);
         $type = $b['type'] ?? '';
-        // Remote control (mouse + keyboard) rides the same queue. These high-rate input
-        // actions are kept out of the audit log and the "recent actions" list below.
+        // Taking and handing back control (remote_start / remote_stop) are actions like
+        // any other: listed and written to the log. The mouse and keyboard events
+        // themselves ride their own fast channel (/api/admin/input); the four old
+        // per-event types are still accepted from an older page, and never logged.
         $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live', 'record',
                     'remote_start', 'remote_stop', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
-        $input   = ['remote_start', 'remote_stop', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
+        $input   = ['mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
         if (!in_array($type, $allowed, true)) {
             fail('Unknown action.', 400);
         }
-        $payload = mb_substr((string) ($b['payload'] ?? ''), 0, 1000);
+        $payload = mb_substr(trim((string) ($b['payload'] ?? '')), 0, 1000);
         // Live / record carry a count of seconds. A non-number used to reach the agent
         // and stall its loop for minutes, so it is refused here.
-        if (($type === 'live' || $type === 'record') && !preg_match('/^\d{1,6}$/', trim($payload))) {
+        if (($type === 'live' || $type === 'record') && !preg_match('/^\d{1,6}$/', $payload)) {
             fail('That action needs a number of seconds.', 400);
         }
         if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
             fail('Not found.', 404);
         }
+        // While the owner keeps watching, the page asks for more live time every minute
+        // or so. That is the same live view, not a new action: offer the same row to
+        // the computer again instead of adding a line to the lists and the log each
+        // time. Only when that row is this computer's newest live action (so never
+        // after a Stop) and still recent.
+        if ($type === 'live' && $payload !== '0' && !empty($b['keepalive'])) {
+            $last = q1("SELECT id, payload, (created_at > NOW() - INTERVAL 5 MINUTE) AS recent
+                        FROM commands WHERE device_id = ? AND type = 'live' ORDER BY id DESC LIMIT 1", [$id]);
+            if ($last && $last['payload'] !== '0' && (int) $last['recent'] === 1) {
+                x("UPDATE commands SET status = 'pending', payload = ?, result = '', created_at = NOW(), done_at = NULL
+                   WHERE id = ?", [$payload, $last['id']]);
+                sig_wake($id);
+                json_out(['ok' => true, 'command_id' => (int) $last['id'], 'kept' => true]);
+            }
+        }
+        if ($type === 'remote_start') {
+            input_clear($id);          // a new control session starts with an empty queue
+            sig_put($id, 'ctl', '0');  // ...and with no sign yet that the computer is listening
+        }
+        if ($type === 'remote_stop') {
+            sig_put($id, 'ctl', '0');
+            // A "take control" the computer never picked up (it was off) must not reach
+            // it later, after the owner has already given up.
+            x("UPDATE commands SET status = 'failed', result = 'cancelled: stopped before the computer took it', done_at = NOW()
+               WHERE device_id = ? AND type = 'remote_start' AND status = 'pending'", [$id]);
+        }
         $cid = x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
             [$id, $type, $payload, $a['id']]);
         if (!in_array($type, $input, true)) {
-            log_event($id, 'command', $type . ' ' . $payload . ' · by ' . ($a['name'] ?: $a['username']));
+            log_event($id, 'command', trim($type . ' ' . $payload) . ' · by ' . ($a['name'] ?: $a['username']));
         }
         sig_wake($id);
         json_out(['ok' => true, 'command_id' => $cid]);
@@ -547,7 +675,11 @@ function route(string $path, string $method, array $cfg): void
         if ($id && $events) {
             input_push($id, array_slice($events, 0, 100));
         }
-        json_out(['ok' => true]);
+        // Tell the page whether the computer is really taking the input: how many
+        // seconds ago it last asked for some (null = it never has). The page shows
+        // "Controlling" only on this evidence, and says so when it stops.
+        $asked = (int) sig_get($id, 'ctl');
+        json_out(['ok' => true, 'agent' => $asked > 0 ? max(0, time() - $asked) : null]);
     }
 
     // The agent drains the owner's input (long-poll): returns at once when there is input,
@@ -555,9 +687,12 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/agent/input' && $method === 'GET') {
         $dev    = require_device();
         $id     = (int) $dev['id'];
+        sig_put($id, 'ctl', (string) time());   // it is in a control session and listening
+        // Read the signal BEFORE looking: an event pushed right after the look still
+        // changes it, so it ends the wait below instead of sitting there for seconds.
+        $seen   = sig_get($id, 'insig');
         $events = input_drain($id);
-        if (!$events) {
-            $seen = sig_get($id, 'insig');
+        if (!$events && !single_worker()) {   // one worker for everything: answer now, the agent asks again
             db_close();                       // hold no database connection while waiting
             // A short hold: an owner event returns it at once (the signal changes), and when
             // nothing is happening it returns every few seconds so the agent can promptly
@@ -570,6 +705,7 @@ function route(string $path, string $method, array $cfg): void
                 }
             }
             $events = input_drain($id);
+            sig_put($id, 'ctl', (string) time());
         }
         json_out(['ok' => true, 'events' => $events]);
     }
@@ -662,8 +798,13 @@ function route(string $path, string $method, array $cfg): void
                 [$did, 'notice', (string) $nid, $a['id']]);
             sig_wake($did);
         }
-        log_event(null, 'notice', 'sent #' . $nid . ' to ' . count($targets) . ' computer(s) [' . $scope . ']');
-        json_out(['ok' => true, 'notice_id' => $nid, 'sent' => count($targets)]);
+        log_event(null, 'notice', 'sent #' . $nid . ' to ' . count($targets) . ' computer(s) [' . $scope . '] · by ' . ($a['name'] ?: $a['username']));
+        // How many of them are on right now. The rest get it when they are next on,
+        // for as long as a notice is kept waiting.
+        $marks = implode(',', array_fill(0, count($targets), '?'));
+        $on    = (int) (q1("SELECT COUNT(*) c FROM devices WHERE id IN ($marks) AND last_seen > NOW() - INTERVAL 3 MINUTE", $targets)['c'] ?? 0);
+        json_out(['ok' => true, 'notice_id' => $nid, 'sent' => count($targets), 'online' => $on,
+                  'wait_hours' => max(1, (int) em_config()['notice_hours'])]);
     }
 
     // The recent actions sent to a computer, with their outcome.
@@ -725,7 +866,7 @@ function route(string $path, string $method, array $cfg): void
     if ($path === '/api/admin/frames' && $method === 'GET') {
         require_admin();
         $id    = (int) ($_GET['id'] ?? 0);
-        $limit = max(1, min(600, (int) ($_GET['limit'] ?? 300)));
+        $limit = max(1, min(1500, (int) ($_GET['limit'] ?? 300)));   // a whole day at one a minute is 1440
         $from  = $_GET['from'] ?? '';
         $to    = $_GET['to'] ?? '';
         $sql   = 'SELECT id, ts, path FROM screenshots WHERE device_id = ?';
@@ -816,6 +957,9 @@ function route(string $path, string $method, array $cfg): void
         header('Cache-Control: no-cache');
         header('ETag: "' . $shell . '"');
         header('X-Shell: ' . $shell);
+        header('X-Frame-Options: DENY');             // the console is never shown inside another site's page
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: same-origin');
         // The reverse proxy and Apache may add W/ or -gzip when they compress.
         if (str_replace(['W/', '"', '-gzip'], '', $_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $shell) {
             http_response_code(304);

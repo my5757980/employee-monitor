@@ -1,6 +1,10 @@
 -- Employee Monitor - its own MySQL database (empmon), separate from every other project.
 -- Workplace monitoring of company-owned computers, with the agent visible to the
 -- user (consent_ack) - no hidden/stealth operation.
+--
+-- "php tool.php migrate" runs this file. It makes the database under the name set
+-- in EM_DB_NAME and skips the two lines below; they are here for running the file
+-- by hand with the mysql client.
 
 CREATE DATABASE IF NOT EXISTS empmon CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE empmon;
@@ -59,9 +63,10 @@ CREATE TABLE IF NOT EXISTS activity (
   recv_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- when the server received it (for cleanup)
   active_app   VARCHAR(190) NOT NULL DEFAULT '',
   window_title VARCHAR(512) NOT NULL DEFAULT '',
-  website      VARCHAR(255) NOT NULL DEFAULT '',
+  website      VARCHAR(255) NOT NULL DEFAULT '',     -- the site, where the window title names one
   is_idle      TINYINT NOT NULL DEFAULT 0,
-  KEY (device_id, ts)
+  KEY (device_id, ts),                               -- a day's report
+  KEY dev_latest (device_id, id)                     -- this computer's newest rows, at once
 );
 
 -- Screenshot metadata; the image files live under server/data/shots/<device>/.
@@ -73,14 +78,15 @@ CREATE TABLE IF NOT EXISTS screenshots (
   path      VARCHAR(255) NOT NULL,
   w         INT NOT NULL DEFAULT 0,
   h         INT NOT NULL DEFAULT 0,
-  KEY (device_id, ts)
+  KEY (device_id, ts),                             -- playback over a time range
+  KEY dev_latest (device_id, id)                   -- this computer's newest pictures, at once
 );
 
 -- Actions the admin sends to a computer; the agent picks them up on its next ping.
 CREATE TABLE IF NOT EXISTS commands (
   id         BIGINT AUTO_INCREMENT PRIMARY KEY,
   device_id  INT NOT NULL,
-  type       VARCHAR(32)  NOT NULL,            -- message | lock | logoff | restart | shutdown | live
+  type       VARCHAR(32)  NOT NULL,            -- notice | lock | logoff | restart | shutdown | live | record | remote_start | remote_stop
   payload    VARCHAR(1000) NOT NULL DEFAULT '',
   status     ENUM('pending','sent','done','failed') NOT NULL DEFAULT 'pending',
   result     VARCHAR(255) NOT NULL DEFAULT '',
@@ -130,7 +136,8 @@ CREATE TABLE IF NOT EXISTS events (
   ts        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   type      VARCHAR(48) NOT NULL,
   detail    VARCHAR(512) NOT NULL DEFAULT '',
-  KEY (device_id, ts)
+  KEY (device_id, ts),
+  KEY type_ts (type, ts)                       -- the sign-in throttle counts recent failures
 );
 
 -- Small dashboard key/value settings. First use: 'cameras_url' - the web address

@@ -1,5 +1,10 @@
 # Spec: the owner's own copy on his AWS server
 
+> This is the record of one pass of work (5 Nov 2026), kept as it was written.
+> Remote control was added to the product afterwards, as a visible, announced
+> feature, so "no remote control" under Not in scope describes this pass only.
+> The README has the present state.
+
 **Asked (5 Nov 2026):** the tool runs on Sir's 1Panel server, the owner has no copy of his own. Deploy it on his AWS, where the hackathon demo runs.
 
 ## Must

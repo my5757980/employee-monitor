@@ -11,18 +11,34 @@
   body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   .tile-shot { aspect-ratio: 16/10; object-fit: cover; background:#0f172a; }
   .live-shot { width:100%; max-height:74vh; min-height:300px; object-fit:contain; background:#0f172a; display:block; border-radius:.5rem; }
+  /* minmax(0, ...): a column never grows wider than the panel for a long line inside it. */
+  .detail-split { grid-template-columns: minmax(0,1fr); }
   @media (min-width:1024px){ .detail-split { grid-template-columns: minmax(0,1.95fr) minmax(0,1fr); } }
   #liveFs { position:fixed; inset:0; background:#000; z-index:70; display:none; }
   #liveFs.on { display:grid; place-items:center; }
-  #liveFs img { max-width:100vw; max-height:100vh; object-fit:contain; }
+  #liveFs img { width:100vw; height:100vh; object-fit:contain; }   /* fills the screen; bars only where the shapes differ */
   #liveFs .fsclose { position:fixed; top:12px; right:18px; color:#fff; font-size:34px; line-height:1; cursor:pointer; opacity:.85; z-index:71; }
+  /* While controlling, nothing of ours may lie on the computer's picture: a button there
+     would swallow the click meant for whatever is under it (a window's X, the clock).
+     The one way out of full screen sits at the top centre, where the computer itself
+     shows its "being controlled" bar, so it covers nothing that can be clicked. */
+  #liveFs .fsexit { display:none; position:fixed; top:6px; left:50%; transform:translateX(-50%); z-index:71; cursor:pointer;
+                    background:rgba(15,23,42,.82); color:#fff; font-size:12px; font-weight:600; padding:4px 12px; border-radius:9999px; }
+  #liveFs.ctl .fsclose { display:none; }
+  #liveFs.ctl .fsexit { display:block; }
+  #dShot.ctl { outline:3px solid #4f46e5; cursor:default; border-radius:0; }   /* square: its very corners can be clicked too */
+  #ctlBar { background:#4f46e5; color:#fff; }
+  #ctlBar.wait { background:#475569; }
+  #ctlBar button { background:rgba(255,255,255,.18); }
+  #ctlBar button:hover { background:rgba(255,255,255,.32); }
+  .cmdkey { background:#f1f5f9; border-radius:.5rem; padding:.5rem .75rem; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.75rem; overflow-wrap:anywhere; user-select:all; -webkit-user-select:all; }
   input[type=range] { accent-color:#4f46e5; }
   .scrollx::-webkit-scrollbar { height: 0; }
   .thin::-webkit-scrollbar { width: 7px; height: 7px; }
   .thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius: 4px; }
 </style>
 <!-- Compiled by server/tools/build_css.py. Do not edit by hand. -->
-<style>/* tailwind:start */*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.14 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.bottom-2{bottom:.5rem}.left-2{left:.5rem}.right-2{right:.5rem}.top-0{top:0}.top-2{top:.5rem}.z-10{z-index:10}.z-20{z-index:20}.z-30{z-index:30}.col-span-2{grid-column:span 2/span 2}.mx-auto{margin-left:auto;margin-right:auto}.my-1{margin-top:.25rem;margin-bottom:.25rem}.my-6{margin-top:1.5rem;margin-bottom:1.5rem}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.ml-2{margin-left:.5rem}.ml-6{margin-left:1.5rem}.ml-auto{margin-left:auto}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.block{display:block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-14{height:3.5rem}.h-3{height:.75rem}.h-8{height:2rem}.h-9{height:2.25rem}.max-h-24{max-height:6rem}.max-h-40{max-height:10rem}.max-h-\[22rem\]{max-height:22rem}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-14{width:3.5rem}.w-16{width:4rem}.w-28{width:7rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-full{width:100%}.min-w-0{min-width:0}.max-w-7xl{max-width:80rem}.max-w-\[90\%\]{max-width:90%}.max-w-\[9rem\]{max-width:9rem}.max-w-lg{max-width:32rem}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}@keyframes pulse{50%{opacity:.5}}.animate-pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}.cursor-pointer{cursor:pointer}.select-all{-webkit-user-select:all;-moz-user-select:all;user-select:all}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.place-items-center{place-items:center}.items-center{align-items:center}.justify-center{justify-content:center}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.overflow-auto{overflow:auto}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-b-2{border-bottom-width:2px}.border-indigo-600{--tw-border-opacity:1;border-color:rgb(79 70 229/var(--tw-border-opacity))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity))}.border-transparent{border-color:transparent}.bg-amber-600{--tw-bg-opacity:1;background-color:rgb(217 119 6/var(--tw-bg-opacity))}.bg-black\/50{background-color:rgba(0,0,0,.5)}.bg-black\/55{background-color:rgba(0,0,0,.55)}.bg-emerald-500\/90{background-color:rgba(16,185,129,.9)}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105/var(--tw-bg-opacity))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity))}.bg-orange-600{--tw-bg-opacity:1;background-color:rgb(234 88 12/var(--tw-bg-opacity))}.bg-red-50{--tw-bg-opacity:1;background-color:rgb(254 242 242/var(--tw-bg-opacity))}.bg-red-600{--tw-bg-opacity:1;background-color:rgb(220 38 38/var(--tw-bg-opacity))}.bg-rose-600{--tw-bg-opacity:1;background-color:rgb(225 29 72/var(--tw-bg-opacity))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity))}.bg-slate-700{--tw-bg-opacity:1;background-color:rgb(51 65 85/var(--tw-bg-opacity))}.bg-slate-700\/80{background-color:rgba(51,65,85,.8)}.bg-slate-800{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.bg-slate-900\/60{background-color:rgba(15,23,42,.6)}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity))}.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.p-7{padding:1.75rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-16{padding-top:4rem;padding-bottom:4rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.pb-2{padding-bottom:.5rem}.pr-1{padding-right:.25rem}.text-center{text-align:center}.text-right{text-align:right}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace}.text-2xl{font-size:1.5rem;line-height:2rem}.text-\[10px\]{font-size:10px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.leading-none{line-height:1}.leading-tight{line-height:1.25}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6/var(--tw-text-opacity))}.text-emerald-600{--tw-text-opacity:1;color:rgb(5 150 105/var(--tw-text-opacity))}.text-red-600{--tw-text-opacity:1;color:rgb(220 38 38/var(--tw-text-opacity))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity))}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color),0 1px 2px -1px var(--tw-shadow-color)}.shadow,.shadow-lg{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgba(0,0,0,.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color)}.shadow-sm,.shadow-xl{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-xl{--tw-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1);--tw-shadow-colored:0 20px 25px -5px var(--tw-shadow-color),0 8px 10px -6px var(--tw-shadow-color)}.ring-2{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-indigo-400{--tw-ring-opacity:1;--tw-ring-color:rgb(129 140 248/var(--tw-ring-opacity))}.ring-offset-2{--tw-ring-offset-width:2px}.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.hover\:bg-amber-700:hover{--tw-bg-opacity:1;background-color:rgb(180 83 9/var(--tw-bg-opacity))}.hover\:bg-black\/80:hover{background-color:rgba(0,0,0,.8)}.hover\:bg-emerald-700:hover{--tw-bg-opacity:1;background-color:rgb(4 120 87/var(--tw-bg-opacity))}.hover\:bg-indigo-700:hover{--tw-bg-opacity:1;background-color:rgb(67 56 202/var(--tw-bg-opacity))}.hover\:bg-orange-700:hover{--tw-bg-opacity:1;background-color:rgb(194 65 12/var(--tw-bg-opacity))}.hover\:bg-red-100:hover{--tw-bg-opacity:1;background-color:rgb(254 226 226/var(--tw-bg-opacity))}.hover\:bg-red-700:hover{--tw-bg-opacity:1;background-color:rgb(185 28 28/var(--tw-bg-opacity))}.hover\:bg-rose-700:hover{--tw-bg-opacity:1;background-color:rgb(190 18 60/var(--tw-bg-opacity))}.hover\:bg-slate-200:hover{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.hover\:bg-slate-300:hover{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity))}.hover\:bg-slate-900:hover{--tw-bg-opacity:1;background-color:rgb(15 23 42/var(--tw-bg-opacity))}.hover\:text-slate-700:hover{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.hover\:text-slate-800:hover{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.hover\:ring-2:hover{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.hover\:ring-indigo-200:hover{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity))}.group:hover .group-hover\:opacity-95{opacity:.95}@media (min-width:640px){.sm\:col-auto{grid-column:auto}.sm\:mx-auto{margin-left:auto;margin-right:auto}.sm\:my-2{margin-top:.5rem;margin-bottom:.5rem}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:hidden{display:none}.sm\:min-h-0{min-height:0}.sm\:max-w-6xl{max-width:72rem}.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:flex-wrap{flex-wrap:wrap}.sm\:gap-2{gap:.5rem}.sm\:gap-3{gap:.75rem}.sm\:gap-4{gap:1rem}.sm\:gap-5{gap:1.25rem}.sm\:rounded-2xl{border-radius:1rem}.sm\:rounded-t-2xl{border-top-left-radius:1rem;border-top-right-radius:1rem}.sm\:p-4{padding:1rem}.sm\:px-3{padding-left:.75rem;padding-right:.75rem}.sm\:px-5{padding-left:1.25rem;padding-right:1.25rem}.sm\:py-24{padding-top:6rem;padding-bottom:6rem}.sm\:py-6{padding-top:1.5rem;padding-bottom:1.5rem}.sm\:text-lg{font-size:1.125rem;line-height:1.75rem}}@media (min-width:768px){.md\:inline{display:inline}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}@media (min-width:1024px){.lg\:max-h-\[30rem\]{max-height:30rem}}@media (min-width:1280px){.xl\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}@media (min-width:1536px){.\32xl\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}/* tailwind:end */
+<style>/* tailwind:start */*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.14 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.bottom-2{bottom:.5rem}.left-2{left:.5rem}.right-2{right:.5rem}.top-0{top:0}.top-2{top:.5rem}.z-10{z-index:10}.z-20{z-index:20}.z-30{z-index:30}.col-span-2{grid-column:span 2/span 2}.mx-auto{margin-left:auto;margin-right:auto}.my-1{margin-top:.25rem;margin-bottom:.25rem}.my-6{margin-top:1.5rem;margin-bottom:1.5rem}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.ml-2{margin-left:.5rem}.ml-6{margin-left:1.5rem}.ml-auto{margin-left:auto}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.block{display:block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-14{height:3.5rem}.h-3{height:.75rem}.h-8{height:2rem}.h-9{height:2.25rem}.max-h-24{max-height:6rem}.max-h-40{max-height:10rem}.max-h-\[22rem\]{max-height:22rem}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-14{width:3.5rem}.w-16{width:4rem}.w-28{width:7rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-full{width:100%}.min-w-0{min-width:0}.max-w-7xl{max-width:80rem}.max-w-\[90\%\]{max-width:90%}.max-w-\[9rem\]{max-width:9rem}.max-w-lg{max-width:32rem}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}@keyframes pulse{50%{opacity:.5}}.animate-pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}.cursor-pointer{cursor:pointer}.select-all{-webkit-user-select:all;-moz-user-select:all;user-select:all}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.place-items-center{place-items:center}.items-center{align-items:center}.justify-center{justify-content:center}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.overflow-auto{overflow:auto}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-b-2{border-bottom-width:2px}.border-indigo-600{--tw-border-opacity:1;border-color:rgb(79 70 229/var(--tw-border-opacity))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249/var(--tw-border-opacity))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity))}.border-transparent{border-color:transparent}.bg-amber-600{--tw-bg-opacity:1;background-color:rgb(217 119 6/var(--tw-bg-opacity))}.bg-black\/50{background-color:rgba(0,0,0,.5)}.bg-black\/55{background-color:rgba(0,0,0,.55)}.bg-emerald-500\/90{background-color:rgba(16,185,129,.9)}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105/var(--tw-bg-opacity))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity))}.bg-orange-600{--tw-bg-opacity:1;background-color:rgb(234 88 12/var(--tw-bg-opacity))}.bg-red-50{--tw-bg-opacity:1;background-color:rgb(254 242 242/var(--tw-bg-opacity))}.bg-red-600{--tw-bg-opacity:1;background-color:rgb(220 38 38/var(--tw-bg-opacity))}.bg-rose-600{--tw-bg-opacity:1;background-color:rgb(225 29 72/var(--tw-bg-opacity))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity))}.bg-slate-700{--tw-bg-opacity:1;background-color:rgb(51 65 85/var(--tw-bg-opacity))}.bg-slate-700\/80{background-color:rgba(51,65,85,.8)}.bg-slate-800{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.bg-slate-900\/60{background-color:rgba(15,23,42,.6)}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity))}.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.p-7{padding:1.75rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-16{padding-top:4rem;padding-bottom:4rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.pb-2{padding-bottom:.5rem}.pr-1{padding-right:.25rem}.text-center{text-align:center}.text-right{text-align:right}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace}.text-2xl{font-size:1.5rem;line-height:2rem}.text-\[10px\]{font-size:10px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.leading-none{line-height:1}.leading-tight{line-height:1.25}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6/var(--tw-text-opacity))}.text-emerald-600{--tw-text-opacity:1;color:rgb(5 150 105/var(--tw-text-opacity))}.text-red-600{--tw-text-opacity:1;color:rgb(220 38 38/var(--tw-text-opacity))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity))}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color),0 1px 2px -1px var(--tw-shadow-color)}.shadow,.shadow-lg{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgba(0,0,0,.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color)}.shadow-sm,.shadow-xl{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-xl{--tw-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1);--tw-shadow-colored:0 20px 25px -5px var(--tw-shadow-color),0 8px 10px -6px var(--tw-shadow-color)}.ring-2{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-indigo-400{--tw-ring-opacity:1;--tw-ring-color:rgb(129 140 248/var(--tw-ring-opacity))}.ring-offset-2{--tw-ring-offset-width:2px}.blur{--tw-blur:blur(8px)}.blur,.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.hover\:bg-amber-700:hover{--tw-bg-opacity:1;background-color:rgb(180 83 9/var(--tw-bg-opacity))}.hover\:bg-black\/80:hover{background-color:rgba(0,0,0,.8)}.hover\:bg-emerald-700:hover{--tw-bg-opacity:1;background-color:rgb(4 120 87/var(--tw-bg-opacity))}.hover\:bg-indigo-700:hover{--tw-bg-opacity:1;background-color:rgb(67 56 202/var(--tw-bg-opacity))}.hover\:bg-orange-700:hover{--tw-bg-opacity:1;background-color:rgb(194 65 12/var(--tw-bg-opacity))}.hover\:bg-red-100:hover{--tw-bg-opacity:1;background-color:rgb(254 226 226/var(--tw-bg-opacity))}.hover\:bg-red-700:hover{--tw-bg-opacity:1;background-color:rgb(185 28 28/var(--tw-bg-opacity))}.hover\:bg-rose-700:hover{--tw-bg-opacity:1;background-color:rgb(190 18 60/var(--tw-bg-opacity))}.hover\:bg-slate-200:hover{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.hover\:bg-slate-300:hover{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity))}.hover\:bg-slate-800:hover{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.hover\:bg-slate-900:hover{--tw-bg-opacity:1;background-color:rgb(15 23 42/var(--tw-bg-opacity))}.hover\:text-slate-700:hover{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.hover\:text-slate-800:hover{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.hover\:ring-2:hover{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.hover\:ring-indigo-200:hover{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity))}.group:hover .group-hover\:opacity-95{opacity:.95}@media (min-width:640px){.sm\:col-auto{grid-column:auto}.sm\:mx-auto{margin-left:auto;margin-right:auto}.sm\:my-2{margin-top:.5rem;margin-bottom:.5rem}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:hidden{display:none}.sm\:min-h-0{min-height:0}.sm\:max-w-6xl{max-width:72rem}.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:flex-wrap{flex-wrap:wrap}.sm\:gap-2{gap:.5rem}.sm\:gap-3{gap:.75rem}.sm\:gap-4{gap:1rem}.sm\:gap-5{gap:1.25rem}.sm\:rounded-2xl{border-radius:1rem}.sm\:rounded-t-2xl{border-top-left-radius:1rem;border-top-right-radius:1rem}.sm\:p-4{padding:1rem}.sm\:px-3{padding-left:.75rem;padding-right:.75rem}.sm\:px-5{padding-left:1.25rem;padding-right:1.25rem}.sm\:py-24{padding-top:6rem;padding-bottom:6rem}.sm\:py-6{padding-top:1.5rem;padding-bottom:1.5rem}.sm\:text-lg{font-size:1.125rem;line-height:1.75rem}}@media (min-width:768px){.md\:inline{display:inline}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}@media (min-width:1024px){.lg\:max-h-\[30rem\]{max-height:30rem}}@media (min-width:1280px){.xl\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}@media (min-width:1536px){.\32xl\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}/* tailwind:end */
 body.ro .owner-act{display:none!important}</style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -94,18 +110,25 @@ body.ro .owner-act{display:none!important}</style>
     </div>
     <div class="grid detail-split gap-4 p-3 sm:p-4">
       <div>
+        <!-- Shown instead of the buttons on the picture while control is on. -->
+        <div id="ctlBar" class="hidden flex items-center gap-2 mb-2 rounded-lg px-3 py-1.5 text-sm">
+          <span id="ctlText" class="font-semibold truncate min-w-0"></span>
+          <button id="ctlFs" class="ml-auto shrink-0 rounded px-2 py-1 text-xs font-medium">⛶ Fullscreen</button>
+          <button id="ctlStop" class="shrink-0 rounded px-2 py-1 text-xs font-medium">■ Stop control</button>
+        </div>
         <div class="relative">
-          <img id="dShot" class="live-shot w-full border">
+          <img id="dShot" class="live-shot w-full border" draggable="false">
           <button id="dLive" title="Watch this computer live" class="owner-act absolute top-2 left-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-sm font-medium">● Live</button>
           <button id="dFs" title="Fullscreen" class="absolute top-2 right-2 bg-black/55 hover:bg-black/80 text-white rounded-lg px-3 py-1.5 text-sm font-medium">⛶ Fullscreen</button>
           <span id="dLiveState" class="hidden absolute bottom-2 left-2 max-w-[90%] truncate bg-black/55 text-white rounded-lg px-2 py-1 text-xs"></span>
-          <span id="remoteBadge" class="hidden absolute bottom-2 right-2 bg-indigo-600 text-white rounded-lg px-2 py-1 text-xs font-semibold">🖱 Controlling</span>
         </div>
+        <p id="ctlMsg" class="hidden text-xs text-amber-600 mt-1"></p>
         <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
         <div class="mt-4 bg-slate-50 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-2">
             <h3 class="font-semibold text-sm">Playback</h3>
             <button id="playBtn" class="text-xs bg-slate-800 text-white rounded px-2 py-1">▶ Play</button>
+            <span id="recBadge" class="hidden text-xs font-semibold text-red-600"></span>
             <span id="playTs" class="text-xs text-slate-500 ml-auto"></span>
           </div>
           <input id="playSlider" type="range" min="0" max="0" value="0" class="w-full">
@@ -172,16 +195,25 @@ body.ro .owner-act{display:none!important}</style>
 <div id="addModal" class="hidden fixed inset-0 z-30 bg-black/50 p-4 grid place-items-center">
   <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-6">
     <h2 class="font-bold text-lg mb-1">Add a computer</h2>
-    <p class="text-sm text-slate-500 mb-4">Create an install key, then run the agent installer on that company computer and type the key once.</p>
+    <p class="text-sm text-slate-500 mb-4">Create an install key, then run the installer on that company computer with the line shown below. A key adds one computer, once.</p>
     <label class="block text-xs font-semibold text-slate-600 mb-1">Label (e.g. employee name or desk)</label>
     <input id="addLabel" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="Reception PC">
     <button id="addMake" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 font-semibold">Create install key</button>
     <div id="addResult" class="hidden mt-4">
-      <p class="text-xs text-slate-500 mb-1">Install key (type it in the agent once):</p>
+      <p class="text-xs text-slate-500 mb-1">Install key:</p>
       <div class="flex items-center gap-2">
         <code id="addKey" class="flex-1 bg-slate-100 rounded-lg px-3 py-2 font-mono text-sm select-all"></code>
         <button id="addCopy" class="text-sm bg-slate-200 hover:bg-slate-300 rounded-lg px-3 py-2">Copy</button>
       </div>
+      <p class="text-xs text-slate-500 mt-3 mb-1">On that computer, open a Command Prompt <b>as Administrator</b> in the agent folder and run:</p>
+      <div class="flex items-center gap-2">
+        <div id="addCmd" class="cmdkey flex-1 min-w-0"></div>
+        <button id="addCmdCopy" class="text-sm bg-slate-200 hover:bg-slate-300 rounded-lg px-3 py-2 shrink-0">Copy</button>
+      </div>
+    </div>
+    <div id="addKeysBox" class="hidden mt-4">
+      <p class="text-xs font-semibold text-slate-600 mb-1">Keys not used yet</p>
+      <div id="addKeys" class="max-h-40 overflow-y-auto text-sm"></div>
     </div>
     <button id="addClose" class="w-full text-slate-500 hover:text-slate-800 text-sm mt-4">Close</button>
   </div>
@@ -246,7 +278,7 @@ body.ro .owner-act{display:none!important}</style>
   </div>
 </div>
 
-<div id="liveFs"><span class="fsclose">&times;</span><img id="liveFsImg"></div>
+<div id="liveFs"><span class="fsclose">&times;</span><span class="fsexit">■ Leave full screen</span><img id="liveFsImg" draggable="false"></div>
 <script>
 // The server answers in about 3 ms, but it is far away: each trip takes 300-400 ms.
 // So this page draws first from what it already has and asks the network after,
@@ -320,6 +352,7 @@ function signedOut() {
   saved.wipe();
   stopTimers();
   stopPlay();
+  endControl('', false);
   stopLive(false);
   curId = null;
   detailCache.clear();
@@ -396,6 +429,9 @@ function startTimers() {
 }
 function stopTimers() { clearInterval(gridTimer); clearInterval(panelTimer); gridTimer = panelTimer = null; }
 document.addEventListener('visibilitychange', () => {
+  // The employee's own keyboard and mouse are held while the owner is in control, so
+  // control does not go on behind the owner's back: leaving this page hands them back.
+  if (document.hidden && ctl.state !== 'off') endControl('Control was stopped because this page was no longer in front. Press Take Control to go on.');
   if (document.hidden || !gridTimer) return;
   if (curId) refreshPanel(); else refreshGrid();
 });
@@ -461,7 +497,11 @@ async function fetchDetail(id) {
   for (;;) {
     const asked = changes;
     const r = await api('/api/admin/device?id=' + id);
-    if (asked === changes) { detailCache.set(id, { d: r.device, at: Date.now() }); return r.device; }
+    if (asked === changes) {
+      (r.device.commands || []).forEach(c => { c.at = Date.now(); });   // the moment their 'age' was true
+      detailCache.set(id, { d: r.device, at: Date.now() });
+      return r.device;
+    }
   }
 }
 function getDetail(id, force) {
@@ -504,9 +544,11 @@ function openDetail(id) {
   id = String(id);
   stopPlay();
   stopLive(true);
-  if (remoteOn) { sendRemote('remote_stop', ''); setRemoteUI(false); }
+  endControl('');                        // control never follows the owner to another computer
   curId = id; userPicked = false; repPicked = null; polDirty = false;
   localCmds = []; cmdRows = []; frames = []; lastShotId = null;
+  recUntil = 0; recWas = false;
+  ctlSay(''); ctlUI(); paintRec();
   $('#playSlider').max = 0; setText($('#playTs'), '');
   $('#detail').setAttribute('data-id', id);
   const big = $('#dShot');
@@ -608,16 +650,26 @@ $('#dHistory').addEventListener('pointerover', (e) => {
 
 // ---- playback (scrub through recorded frames) ----
 let frames = [], playToken = 0, playing = false, frameIdx = 0, scrubWant = null, scrubBusy = false, scrubTimer = null;
-async function loadFrames(id) {
+// quiet: a refresh while recording. It adds the new frames and leaves the owner where
+// they are, if they are playing or looking at an older frame.
+async function loadFrames(id, quiet) {
   let list = null;
-  try { list = (await api('/api/admin/frames?id=' + id + '&limit=400')).frames || []; } catch (e) {}
+  // 1500 is a whole day at one frame a minute.
+  try { list = (await api('/api/admin/frames?id=' + id + '&limit=1500')).frames || []; } catch (e) {}
   if (curId !== id || list === null) return;
-  frames = list;
   const sl = $('#playSlider');
+  const atEnd = !frames.length || Number(sl.value) >= frames.length - 1;
+  const lookingAt = frames[frameIdx] ? frames[frameIdx].id : null;
+  frames = list;
   sl.max = Math.max(0, frames.length - 1);
+  if (quiet && (playing || (userPicked && !atEnd))) {
+    const i = frames.findIndex(f => f.id === lookingAt);
+    if (i >= 0) { sl.value = i; frameIdx = i; }
+    return;
+  }
   sl.value = sl.max;
   frameIdx = Number(sl.max);
-  setText($('#playTs'), frames.length ? frames.length + ' frames' : 'No frames yet');
+  if (!quiet || !userPicked) setText($('#playTs'), frames.length ? frames.length + ' frames' : 'No frames yet');
 }
 function frameText(i) {
   setText($('#dShotTs'), frames[i].ts);
@@ -668,7 +720,7 @@ $('#playBtn').addEventListener('click', async () => {
   playing = true;
   setText($('#playBtn'), '⏸ Pause');
   let i = Number(sl.value);
-  if (i >= frames.length - 1) i = 0;
+  if (i >= frames.length - 1) i = -1;     // at the end: play again from the very first frame
   // Each frame is loaded before it is shown, and the next few are already on their way.
   while (token === playToken && i < frames.length - 1) {
     i++;
@@ -687,26 +739,57 @@ $('#playBtn').addEventListener('click', async () => {
 function closePanel() {
   stopPlay();
   stopLive(true);
-  if (remoteOn) {
-    sendRemote('remote_stop', '');
-    setRemoteUI(false);
-  }
+  endControl('');
   curId = null;
   $('#detail').classList.add('hidden');
   if (shellChanged) { location.reload(); return; }
   refreshGrid();
 }
 $('#dClose').addEventListener('click', closePanel);
-$('#dFs').addEventListener('click', () => {
-  const fs = $('#liveFsImg');
+// Full screen is the browser's real full screen - nothing of the browser or of Windows is
+// left around the picture - and the picture fills it. While controlling in full screen,
+// Chrome and Edge also hand over the keys the system otherwise keeps for itself (Esc,
+// Alt+Tab, the Windows key), so they too go to the computer being controlled. "Leave full
+// screen" at the top, or holding Esc, leaves.
+let kbLocked = false, winAlone = false;
+function lockKeys() {
+  if (ctl.state === 'off' || !document.fullscreenElement || !navigator.keyboard || !navigator.keyboard.lock) return;
+  navigator.keyboard.lock().then(() => {
+    kbLocked = !!document.fullscreenElement && ctl.state !== 'off';
+    if (!kbLocked) navigator.keyboard.unlock();
+  }).catch(() => {});
+}
+function unlockKeys() {
+  if (kbLocked && navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+  kbLocked = false;
+}
+function openFs() {
+  const fs = $('#liveFsImg'), box = $('#liveFs');
   fs.src = $('#dShot').src;            // what is on screen now, at once
-  $('#liveFs').classList.add('on');
+  box.classList.add('on');
+  // If the browser refuses, the picture still covers the whole page, as before.
+  if (box.requestFullscreen) box.requestFullscreen().then(lockKeys).catch(() => {});
   if (!live && curPath) {
     const full = shotUrl(curPath, '');
-    preload(full).then(() => { if ($('#liveFs').classList.contains('on') && !live) fs.src = full; }).catch(() => {});
+    preload(full).then(() => { if (box.classList.contains('on') && !live) fs.src = full; }).catch(() => {});
   }
+}
+function closeFs() {
+  $('#liveFs').classList.remove('on');
+  unlockKeys();
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+}
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) { $('#liveFs').classList.remove('on'); unlockKeys(); }   // left with the browser's own key
 });
-$('#liveFs').addEventListener('click', () => $('#liveFs').classList.remove('on'));
+$('#dFs').addEventListener('click', openFs);
+$('#ctlFs').addEventListener('click', openFs);
+$('#liveFs').addEventListener('click', (e) => {
+  // While controlling, a click on the picture belongs to the computer. Only the small
+  // bar at the top leaves full screen.
+  if (ctl.state !== 'off' && !e.target.closest('.fsexit')) return;
+  closeFs();
+});
 $('#dEdit').addEventListener('click', () => {
   const id = curId, x = byId.get(id);
   const name = prompt('Name for this computer / employee:', $('#dName').textContent);
@@ -729,7 +812,7 @@ $('#dEdit').addEventListener('click', () => {
 });
 $('#dRemove').addEventListener('click', () => {
   const id = curId;
-  if (!confirm('Remove this computer from the dashboard? (Its data is kept; re-installing the agent adds it back.)')) return;
+  if (!confirm('Remove this computer from the dashboard?\n\nIts agent stops reporting and its data is kept. To add it back later, create a new install key and run the installer on it again.')) return;
   closePanel();
   const el = document.querySelector(`[data-dev="${id}"]`);
   if (el) el.classList.add('hidden');
@@ -822,34 +905,32 @@ function stopLive(tellComputer) {
   const L = live;
   if (!L) return;
   live = null;
-  // Control cannot continue once the owner can no longer see the screen. Send the instant
-  // release to this exact computer, plus the reliable command, then drop the UI.
-  if (remoteOn) {
-    fetch('/api/admin/input', { credentials: 'same-origin', ...postJson({ device_id: Number(L.id), events: [{ t: 'stop' }] }) }).catch(() => {});
-    sendRemote('remote_stop', '');
-    setRemoteUI(false);
-  }
+  // Control cannot go on once the owner can no longer see the screen.
+  if (ctl.state !== 'off' && ctl.id === L.id) endControl('');
   L.ctrl.abort();
   // The computer stops sending frames now, not when its window runs out.
   if (tellComputer) api('/api/admin/command', postJson({ device_id: Number(L.id), type: 'live', payload: '0' })).catch(() => {});
   paintLiveUI();
 }
+// showRow: the owner pressed Live (a new action, listed). Otherwise it is the same live
+// view asking for more time, which the server folds into that one action.
 function extendLive(id, secs, showRow) {
   const row = showRow ? { id: 0, type: 'live', payload: secs, status: 'sending', created_at: 'now' } : null;
   if (row) { localCmds.unshift(row); paintCommands(); }
-  api('/api/admin/command', postJson({ device_id: Number(id), type: 'live', payload: secs }))
+  api('/api/admin/command', postJson({ device_id: Number(id), type: 'live', payload: secs, keepalive: !showRow }))
     .then(r => { if (row) { row.id = r.command_id; row.status = 'pending'; paintCommands(); watchCommands(String(id)); } })
-    .catch(e => { if (row) { row.status = 'failed'; paintCommands(); } });
+    .catch(e => { if (row) { row.status = 'failed'; row.result = e.message; paintCommands(); } });
 }
 function paintLiveUI() {
   const on = !!(live && live.id === curId);
+  const mine = ctl.state !== 'off' && ctl.id === curId;    // controlling: nothing of ours on the picture
   setText(document.querySelector('.cbtn[data-cmd="live"]'), on ? '■ Stop live' : '● Live view');
   const top = $('#dLive');
   setText(top, on ? '■ Stop' : '● Live');
   top.classList.toggle('bg-emerald-600', !on); top.classList.toggle('hover:bg-emerald-700', !on);
   top.classList.toggle('bg-slate-800', on); top.classList.toggle('hover:bg-slate-900', on);
   const st = $('#dLiveState');
-  st.classList.toggle('hidden', !on);
+  st.classList.toggle('hidden', !on || mine);
   if (!on) return;
   const have = detailCache.get(curId), x = byId.get(curId);
   const online = have ? have.d.online : (x ? x.online : true);
@@ -871,6 +952,7 @@ async function liveLoop(L) {
       const r = await fetch('/api/admin/live-stream?id=' + L.id + '&after=' + (lastShotId || 0),
         { credentials: 'same-origin', cache: 'no-store', signal: L.ctrl.signal });
       if (r.status === 401) { signedOut(); return; }
+      if (r.status === 503) { L.mode = 'poll'; break; }     // this server keeps no stream open: poll at once
       if (!r.ok || !r.body) throw new Error('no stream');
       const reader = r.body.getReader();
       let buf = new Uint8Array(0);
@@ -905,11 +987,17 @@ async function pollLoop(L) {
   while (live === L) {
     try {
       const d = await api('/api/admin/live?id=' + L.id);
-      if (d.shot && d.shot.id !== lastShotId) {
-        const url = shotUrl(d.shot.path, 1280);
+      const path = d.shot ? d.shot.path : null;
+      // The first answer is what was there before: only a later, different one is live.
+      // By path, not id: most live frames are passing ones that share the last kept id.
+      if (L.lastPath === undefined) L.lastPath = path;
+      else if (path && path !== L.lastPath) {
+        const url = shotUrl(path, 1280);
         await preload(url);
         if (live !== L) return;
-        lastShotId = d.shot.id; curPath = d.shot.path; bigToken++; bigEpoch++;
+        L.lastPath = path;
+        if (!/\/t_/.test(path)) { lastShotId = d.shot.id; curPath = path; }   // a passing frame is gone again soon
+        bigToken++; bigEpoch++;
         $('#dShot').src = url;
         if ($('#liveFs').classList.contains('on')) $('#liveFsImg').src = url;
         frameShown(L, d.shot);
@@ -931,7 +1019,9 @@ async function drawFrames(L) {
     im.src = url;
     try { await im.decode(); } catch (e) { URL.revokeObjectURL(url); continue; }
     if (live !== L) { URL.revokeObjectURL(url); break; }
-    lastShotId = meta.id; curPath = meta.path; bigToken++; bigEpoch++;
+    // A passing frame (meta.t) is shown and not kept: it has no id or lasting file of its own.
+    if (!meta.t && meta.id) { lastShotId = meta.id; curPath = meta.path; }
+    bigToken++; bigEpoch++;
     $('#dShot').src = url;
     if ($('#liveFs').classList.contains('on')) $('#liveFsImg').src = url;
     if (liveBlob) URL.revokeObjectURL(liveBlob);
@@ -949,6 +1039,8 @@ function frameShown(L, meta) {
   paintLiveUI();
 }
 setInterval(() => {
+  ctlTick();
+  recTick();
   const L = live;
   if (!L) return;
   paintLiveUI();
@@ -964,9 +1056,14 @@ setInterval(() => {
     L.ctrl.abort();
   }
 }, 1000);
-// Closing the tab also stops the computer sending frames.
+// Closing the tab hands the computer back first, then stops it sending frames.
 window.addEventListener('pagehide', () => {
-  if (live) navigator.sendBeacon('/api/admin/command', new Blob([JSON.stringify({ device_id: Number(live.id), type: 'live', payload: '0' })], { type: 'application/json' }));
+  const tell = (path, o) => navigator.sendBeacon(path, new Blob([JSON.stringify(o)], { type: 'application/json' }));
+  if (ctl.state !== 'off') {
+    tell('/api/admin/input', { device_id: Number(ctl.id), events: [{ t: 'stop' }] });
+    tell('/api/admin/command', { device_id: Number(ctl.id), type: 'remote_stop', payload: '' });
+  }
+  if (live) tell('/api/admin/command', { device_id: Number(live.id), type: 'live', payload: '0' });
 });
 $('#dLive').addEventListener('click', () => sendCommand(curId, 'live', null));
 
@@ -979,7 +1076,7 @@ function sendCommand(id, type, btn) {
     if (live && live.id === String(id)) { stopLive(true); refreshPanel(); } else startLive(id);
     return;
   }
-  const payload = type === 'record' ? '5' : '';
+  const payload = type === 'record' ? (recUntil > Date.now() ? '0' : '5') : '';   // the same button stops a recording
   if (CONFIRM[type] && !confirm(CONFIRM[type])) return;
   if (btn) { btn.classList.add('ring-2', 'ring-offset-2', 'ring-indigo-400'); setTimeout(() => btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-400'), 700); }
   const row = { id: 0, type, payload, status: 'sending', created_at: 'now' };
@@ -989,17 +1086,57 @@ function sendCommand(id, type, btn) {
     .then(r => { row.id = r.command_id; row.status = 'pending'; paintCommands(); watchCommands(String(id)); })
     .catch(e => { row.status = 'failed'; row.result = e.message; paintCommands(); });
 }
+const CMD_NAME = { live:'Live view', record:'Record', remote_start:'Take control', remote_stop:'Stop control', notice:'Notice',
+                   message:'Message', lock:'Lock', logoff:'Log off', restart:'Restart', shutdown:'Shut down' };
 function paintCommands() {
   localCmds = localCmds.filter(l => !l.id || !cmdRows.some(c => c.id === l.id));
-  const INPUT = { mouse_move:1, mouse_click:1, mouse_scroll:1, key:1, remote_start:1, remote_stop:1 };
-  const rows = localCmds.concat(cmdRows).filter(c => !INPUT[c.type] && !(c.type === 'live' && String(c.payload) === '0'));
+  // Taking control and handing it back are listed like any action. Left out: the old
+  // one-row-per-mouse-move kinds, and the "stop" half of a live view.
+  const OLD_INPUT = { mouse_move:1, mouse_click:1, mouse_scroll:1, key:1 };
+  const rows = localCmds.concat(cmdRows).filter(c => !OLD_INPUT[c.type] && !(c.type === 'live' && String(c.payload) === '0'));
   setHtml($('#cmdList'), rows.map(c => {
     const color = c.status==='done'?'text-emerald-600':c.status==='failed'?'text-red-600':'text-slate-400';
+    const stopRec = c.type === 'record' && String(c.payload) === '0';
+    const extra = stopRec ? '' : c.type === 'record' ? esc(c.payload || '5') + ' min' : c.type === 'message' ? esc(c.payload || '') : '';
+    const why = c.status === 'failed' && c.result ? ` <span class="text-red-600">— ${esc(c.result)}</span>` : '';
     return `<div class="py-1 border-b flex gap-2">
       <span class="text-xs text-slate-400 w-28 shrink-0">${esc(c.created_at)}</span>
-      <span class="flex-1"><b>${esc(c.type)}</b> ${esc(c.payload||'')}</span>
+      <span class="flex-1 min-w-0"><b>${esc(stopRec ? 'Stop recording' : (CMD_NAME[c.type] || c.type))}</b> ${extra}${why}</span>
       <span class="text-xs ${color}">${esc(c.status)}</span></div>`;
   }).join('') || '<p class="text-slate-400 py-2">No actions yet.</p>');
+  ctlCheckCommand();
+  recCheck();
+}
+// ---- record: a frame every 4 seconds for five minutes, kept for Playback ----
+// Whether the open computer is recording is read from its newest "record" action: how
+// long it was asked for, and how old it is by the server's clock. So the button knows
+// also after the page was loaded again, and the same button stops the recording.
+let recUntil = 0, recWas = false, recN = 0;
+function recCheck() {
+  const r = localCmds.concat(cmdRows).find(c => c.type === 'record');
+  const mins = r ? Number(r.payload || 0) : 0;
+  // Still waiting after 15 s: the computer has not taken it (it is off), so it is not recording.
+  const notTaken = r && (r.status === 'pending' || r.status === 'sending') && r.age != null && r.age > 15;
+  if (!r || r.status === 'failed' || !(mins > 0) || notTaken) recUntil = 0;
+  else if (r.age == null) { if (recUntil < Date.now()) recUntil = Date.now() + mins * 60000; }     // pressed just now
+  else recUntil = r.age < mins * 60 ? (r.at || Date.now()) + (mins * 60 - r.age) * 1000 : 0;
+  paintRec();
+}
+function paintRec() {
+  const on = !!curId && recUntil > Date.now();
+  const left = on ? Math.round((recUntil - Date.now()) / 1000) : 0;
+  const clock = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+  setText(document.querySelector('.cbtn[data-cmd="record"]'), on ? '■ Stop recording ' + clock : '⏺ Record');
+  const badge = $('#recBadge');
+  badge.classList.toggle('hidden', !on);
+  if (on) setText(badge, '● REC ' + clock);
+  return on;
+}
+function recTick() {                    // once a second
+  const on = paintRec();
+  // While it records, the new frames come into Playback by themselves; once more at the end.
+  if (curId && ((on && ++recN % 5 === 0) || (recWas && !on))) { loadFrames(curId, true); if (!live) refreshPanel(); }
+  recWas = on;
 }
 // Follow an action until the computer has answered. Stops by itself.
 async function watchCommands(id) {
@@ -1010,7 +1147,7 @@ async function watchCommands(id) {
   while (cmdWatch === id && curId === id && Date.now() < cmdUntil) {
     const d = await api('/api/admin/commands?id=' + id).catch(() => null);
     if (curId !== id) break;
-    if (d) { cmdRows = d.commands; paintCommands(); }
+    if (d) { d.commands.forEach(c => { c.at = Date.now(); }); cmdRows = d.commands; paintCommands(); }
     if (!localCmds.length && !cmdRows.slice(0, 8).some(c => c.status === 'pending' || c.status === 'sent')) break;
     await wait(1000);
   }
@@ -1047,8 +1184,42 @@ $('#dRep').addEventListener('change', async (e) => {
 });
 
 // ---- add computer ----
-$('#addBtn').addEventListener('click', () => { $('#addResult').classList.add('hidden'); $('#addLabel').value=''; $('#addModal').classList.remove('hidden'); });
+$('#addBtn').addEventListener('click', () => { $('#addResult').classList.add('hidden'); $('#addLabel').value=''; $('#addModal').classList.remove('hidden'); loadKeys(); });
 $('#addClose').addEventListener('click', () => $('#addModal').classList.add('hidden'));
+// A key is a standing invitation to add a computer: show the unused ones, let the owner cancel one.
+async function loadKeys() {
+  try {
+    const r = await api('/api/admin/enroll-keys');
+    $('#addKeysBox').classList.toggle('hidden', !r.keys.length);
+    setHtml($('#addKeys'), r.keys.map(k =>
+      `<div class="flex items-center gap-2 py-1 border-b">
+         <code class="font-mono text-xs select-all shrink-0">${esc(k.enroll_key)}</code>
+         <span class="flex-1 min-w-0 truncate text-xs text-slate-500">${esc(k.label || '')}</span>
+         <button data-key="${k.id}" class="keyDel shrink-0 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded px-2 py-0.5">Cancel</button>
+       </div>`).join(''));
+  } catch (e) { $('#addKeysBox').classList.add('hidden'); }
+}
+$('#addKeys').addEventListener('click', async (e) => {
+  const b = e.target.closest('.keyDel');
+  if (!b) return;
+  b.disabled = true;
+  try { await api('/api/admin/enroll-key-remove', postJson({ id: Number(b.getAttribute('data-key')) })); }
+  catch (err) { alert(err.message || 'Could not cancel the key.'); }
+  loadKeys();
+});
+// Copies also where the browser offers no clipboard (a page opened over plain http).
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+  }
+  const was = btn.textContent;
+  btn.textContent = 'Copied ✓';
+  setTimeout(() => { btn.textContent = was; }, 1200);
+}
 
 // A manager account is read-only: hide the owner-only controls and the Add/Log buttons.
 function applyRole() {
@@ -1062,7 +1233,7 @@ async function openLog() {
   $('#logModal').classList.remove('hidden');
   const box = $('#logList');
   setHtml(box, SKELETON);
-  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent' };
+  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent', enroll_key: 'Install key', device_renamed: 'Computer renamed' };
   try {
     const r = await api('/api/admin/events');
     if (!r.events.length) { setHtml(box, '<p class=\"text-slate-500 py-4 text-center\">Nothing yet.</p>'); return; }
@@ -1082,20 +1253,25 @@ $('#addMake').addEventListener('click', async () => {
   btn.textContent = 'Creating…';
   try {
     const d = await api('/api/admin/enroll-key', postJson({ label: $('#addLabel').value }));
-    $('#addKey').textContent = d.enroll_key; $('#addResult').classList.remove('hidden');
+    $('#addKey').textContent = d.enroll_key;
+    // The whole line to run: this console's own address and the key.
+    $('#addCmd').textContent = 'install.bat ' + location.origin + ' ' + d.enroll_key;
+    $('#addResult').classList.remove('hidden');
+    loadKeys();
   } catch (e) { alert(e.message || 'Could not create a key.'); }
   btn.textContent = 'Create install key';
 });
-$('#addCopy').addEventListener('click', () => {
-  navigator.clipboard.writeText($('#addKey').textContent);
-  $('#addCopy').textContent = 'Copied ✓';
-  setTimeout(() => { $('#addCopy').textContent = 'Copy'; }, 1200);
-});
+$('#addCopy').addEventListener('click', () => copyText($('#addKey').textContent, $('#addCopy')));
+$('#addCmdCopy').addEventListener('click', () => copyText($('#addCmd').textContent, $('#addCmdCopy')));
 
 // ---- cameras: open the office camera system's OWN web page (no restreaming) ----
 let camUrl = '';
 const camValid = (u) => /^https?:\/\//i.test(u);
-function paintCam() { $('#camCfg').classList.toggle('hidden', !camUrl || myRole !== 'owner'); }
+function paintCam() {
+  $('#camCfg').classList.toggle('hidden', !camUrl || myRole !== 'owner');
+  // Only the owner can save the address, so with none saved a read-only account has nothing to open.
+  $('#camBtn').classList.toggle('hidden', !camUrl && myRole !== 'owner');
+}
 function camSetMsg(t, bad) { const m = $('#camMsg'); m.textContent = t; m.className = 'text-sm mt-3 ' + (bad ? 'text-red-600' : 'text-emerald-600'); m.classList.remove('hidden'); }
 function camEdit() {
   $('#camUrl').value = camUrl;
@@ -1225,6 +1401,9 @@ async function ntSmallerPicture(file) {
 }
 
 async function sendNotice() {
+  // Send pressed while still recording: finish the recording, so the voice goes with the
+  // notice and the microphone is let go.
+  if (ntRecording) ntStopRec();
   const scope = document.querySelector('input[name=ntScope]:checked').value;
   const img = ntPicture ? await ntPicture : null;
   if (!$('#ntBody').value.trim() && !ntVoiceBlob && !img) { ntSetMsg('Write a message, or add a picture or voice.', true); return; }
@@ -1242,11 +1421,16 @@ async function sendNotice() {
   $('#ntSend').disabled = true; $('#ntSend').textContent = 'Sending…';
   try {
     const r = await api('/api/admin/notice', { method: 'POST', body: fd });
-    ntSetMsg('Sent to ' + r.sent + ' computer' + (r.sent === 1 ? '' : 's') + '.', false);
+    // Say honestly who gets it now and who gets it later.
+    const off = r.online == null ? 0 : r.sent - r.online;
+    let text = 'Sent to ' + r.sent + ' computer' + (r.sent === 1 ? '' : 's') + '.';
+    if (off > 0) text += ' ' + (off === r.sent ? (off === 1 ? 'It is' : 'They are') : off + (off === 1 ? ' is' : ' are')) + ' off now and will show it when next switched on' +
+      (r.wait_hours ? ' (within ' + (r.wait_hours >= 48 ? Math.round(r.wait_hours / 24) + ' days' : r.wait_hours + ' hours') + ')' : '') + '.';
+    ntSetMsg(text, false);
     setTimeout(() => {
       $('#noticeModal').classList.add('hidden');
       if (curId) { refreshPanel(); watchCommands(curId); }
-    }, 700);
+    }, off > 0 ? 3200 : 700);
   } catch (e) { ntSetMsg(e.message || 'Could not send.', true); }
   $('#ntSend').disabled = false; $('#ntSend').textContent = 'Send';
 }
@@ -1264,126 +1448,236 @@ $('#ntSend').addEventListener('click', sendNotice);
 $('#ntClose').addEventListener('click', () => { if (ntRecording) ntStopRec(); $('#noticeModal').classList.add('hidden'); });
 
 // ========== REMOTE CONTROL (mouse + keyboard) ==========
-let remoteOn = false;
-let lastMoveSent = 0;
+// 'off' -> 'asking' (the computer has been asked; no sign from it yet) -> 'on' (it is
+// taking the input). The page says "Controlling" only on evidence: every reply on the
+// input channel tells how long ago the computer last asked for input. While control is
+// on, a heartbeat goes out every 2 s; a computer that stops hearing it hands its own
+// keyboard and mouse back by itself within 10 s (a closed laptop lid, a lost network).
+const ctl = { state: 'off', id: null, since: 0, cmdId: 0, modern: false, seenAt: 0, beat: null };
 // The owner's mouse/keyboard ride a fast queue: events are batched and sent about every
 // 55 ms with one request in flight, so a fast drag never backs up. Moves are coalesced.
-let inputPending = [], inputInflight = false, inputTimer = null;
+let inputPending = [], inputInflight = false, inputTimer = null, lastMoveSent = 0, wheelAcc = 0, lastPoint = null;
+const heldButtons = new Set();
+const BTN = ['left', 'middle', 'right'];
 
-function setRemoteUI(on) {
-  remoteOn = on;
-  $('#remoteStart').classList.toggle('hidden', on);
-  $('#remoteStop').classList.toggle('hidden', !on);
-  const badge = $('#remoteBadge');
-  if (badge) badge.classList.toggle('hidden', !on);
-  const img = $('#dShot');
-  // Keep the normal arrow cursor (no crosshair) so it feels like a real screen; a thin
-  // outline is the only hint that control is on.
-  if (img) img.style.outline = on ? '3px solid #4f46e5' : '';
-  if (!on) inputPending = [];
+// Agents from 1.3.0 know button down/up (dragging), key combinations and F-keys. An older
+// one knows only whole clicks and plain keys, so it is sent those until it is updated.
+function verAtLeast(v, want) {
+  const a = String(v || '').split('.').map(n => parseInt(n, 10) || 0), b = want.split('.').map(Number);
+  for (let i = 0; i < b.length; i++) { if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i]; }
+  return true;
 }
-
-function sendRemote(type, payload) {
-  if (!curId) return;
-  api('/api/admin/command', postJson({
-    device_id: Number(curId),
-    type: type,
-    payload: String(payload || '')
-  })).catch(() => {});
+function agentVersionOf(id) {
+  const have = detailCache.get(String(id)), x = byId.get(String(id));
+  return (have && have.d.agent_version) || (x && x.agent_version) || '';
+}
+// Input is sent only while the computer is taking it AND its live picture is on this same
+// computer's panel: a frozen picture can never be clicked into.
+function ctlActive() { return ctl.state === 'on' && !!live && live.id === ctl.id && curId === ctl.id; }
+function ctlSay(text) { const m = $('#ctlMsg'); m.textContent = text || ''; m.classList.toggle('hidden', !text); }
+function ctlUI() {
+  const mine = ctl.state !== 'off' && ctl.id === curId;
+  $('#remoteStart').classList.toggle('hidden', mine);
+  $('#remoteStop').classList.toggle('hidden', !mine);
+  $('#ctlBar').classList.toggle('hidden', !mine);
+  $('#ctlBar').classList.toggle('wait', ctl.state === 'asking');
+  setText($('#ctlText'), ctl.state === 'on' ? '🖱 Controlling — the employee sees a notice on their screen' : 'Starting control… waiting for the computer');
+  // Nothing of ours lies on the picture while controlling (see the note in the styles).
+  $('#dLive').classList.toggle('hidden', mine);
+  $('#dFs').classList.toggle('hidden', mine);
+  $('#dShot').classList.toggle('ctl', mine && ctl.state === 'on');
+  $('#liveFs').classList.toggle('ctl', mine);
+  paintLiveUI();
+}
+async function startControl() {
+  const id = curId;
+  if (!id || ctl.state !== 'off') return;
+  ctlSay('');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // keys go to the computer, not to a button here
+  if (!live || live.id !== id) startLive(id);            // you see what you control
+  Object.assign(ctl, { state: 'asking', id, since: Date.now(), cmdId: 0, seenAt: 0, modern: verAtLeast(agentVersionOf(id), '1.3.0') });
+  inputPending = []; heldButtons.clear(); wheelAcc = 0; lastPoint = null;
+  ctlUI();
+  const row = { id: 0, type: 'remote_start', payload: '', status: 'sending', created_at: 'now' };
+  localCmds.unshift(row);
+  paintCommands();
+  try {
+    const r = await api('/api/admin/command', postJson({ device_id: Number(id), type: 'remote_start', payload: '' }));
+    row.id = r.command_id; row.status = 'pending';
+    if (ctl.id === id && ctl.state !== 'off') ctl.cmdId = r.command_id;
+    paintCommands();
+    watchCommands(id);
+  } catch (e) {
+    row.status = 'failed'; row.result = e.message;
+    paintCommands();
+    if (ctl.id === id) endControl('Control could not be started: ' + (e.message || 'the server did not answer') + '.', false);
+    return;
+  }
+  if (ctl.id !== id || ctl.state === 'off') return;      // stopped again while asking
+  clearInterval(ctl.beat);
+  ctl.beat = setInterval(ctlBeat, 2000);
+  ctlBeat();
+}
+// why: shown under the picture ('' for the owner's own Stop). tell: also tell the computer.
+function endControl(why, tell = true) {
+  if (ctl.state === 'off') return;
+  const id = ctl.id;
+  clearInterval(ctl.beat); ctl.beat = null;
+  clearTimeout(inputTimer); inputTimer = null;
+  inputPending = []; heldButtons.clear();
+  ctl.state = 'off'; ctl.id = null; ctl.cmdId = 0;
+  unlockKeys();
+  if (tell) {
+    // The instant release on the fast channel, and the action as its reliable backup.
+    fetch('/api/admin/input', { credentials: 'same-origin', keepalive: true, ...postJson({ device_id: Number(id), events: [{ t: 'stop' }] }) }).catch(() => {});
+    api('/api/admin/command', postJson({ device_id: Number(id), type: 'remote_stop', payload: '' }))
+      .then(() => { if (curId === id) watchCommands(id); }).catch(() => {});
+  }
+  ctlSay(why);
+  ctlUI();
+}
+function ctlBeat() {
+  if (ctl.state === 'off') return;
+  inputPending.push({ t: 'hb' });
+  flushInput();
+}
+function ctlHeard(ago) {               // seconds since the computer last asked for input; null = never
+  if (ctl.state === 'off' || ago == null || ago > 6) return;
+  ctl.seenAt = Date.now();
+  if (ctl.state === 'asking') { ctl.state = 'on'; ctlUI(); }
+}
+function ctlTick() {                   // once a second
+  if (ctl.state === 'asking' && Date.now() - ctl.since > 25000)
+    endControl('The computer did not start control, so nothing is being controlled. It may be off, or its agent may need updating.');
+  else if (ctl.state === 'on' && Date.now() - ctl.seenAt > 12000)
+    endControl('Control ended: the computer stopped answering.');
+  else if (ctl.state === 'asking' && ctl.beat) ctlBeat();      // ask a little more often, to see it start sooner
+}
+function ctlCheckCommand() {           // the computer's own answer to "take control"
+  if (ctl.state === 'off' || !ctl.cmdId) return;
+  const c = cmdRows.find(r => r.id === ctl.cmdId);
+  if (c && c.status === 'failed') endControl('The computer refused control: ' + (c.result || 'no reason given') + '.');
 }
 
 function queueInput(ev) {
-  if (ev.t !== 'stop' && !remoteActive()) return;
-  if (ev.t === 'm' && inputPending.length && inputPending[inputPending.length - 1].t === 'm') {
-    inputPending[inputPending.length - 1] = ev;          // coalesce consecutive moves
-  } else {
-    inputPending.push(ev);
-  }
-  if (ev.t === 'stop') flushInput();                     // a stop goes at once
-  else if (!inputTimer) inputTimer = setTimeout(flushInput, 55);
+  if (!ctlActive()) return;
+  const last = inputPending[inputPending.length - 1];
+  if (ev.t === 'm' && last && last.t === 'm') inputPending[inputPending.length - 1] = ev;   // only the newest of a run of moves matters
+  else inputPending.push(ev);
+  if (!inputTimer) inputTimer = setTimeout(flushInput, 55);
 }
 async function flushInput() {
-  inputTimer = null;
-  if (inputInflight || !inputPending.length || !curId) return;
-  const events = inputPending; inputPending = [];
+  clearTimeout(inputTimer); inputTimer = null;
+  if (inputInflight || !inputPending.length || ctl.state === 'off') return;
+  const id = ctl.id, events = inputPending;
+  inputPending = [];
   inputInflight = true;
   try {
-    await fetch('/api/admin/input', { credentials: 'same-origin', ...postJson({ device_id: Number(curId), events }) });
+    const r = await fetch('/api/admin/input', { credentials: 'same-origin', ...postJson({ device_id: Number(id), events }) });
+    if (r.status === 401) { inputInflight = false; signedOut(); return; }
+    const d = r.ok ? await r.json().catch(() => null) : null;
+    if (d && ctl.id === id) ctlHeard(d.agent);
   } catch (e) {}
   inputInflight = false;
-  if (inputPending.length && !inputTimer) inputTimer = setTimeout(flushInput, 10);
+  if (inputPending.length && !inputTimer && ctl.state !== 'off') inputTimer = setTimeout(flushInput, 10);
 }
 
-// Control is only live while the Live view is on this same computer, so a frozen
-// picture can never be clicked into, and closing Live ends control at once.
-function remoteActive() { return remoteOn && !!live && live.id === String(curId); }
-// The click point as a fraction of the picture (0..1), not pixels: the live frame may be
-// any size, so the agent multiplies the fraction by its own screen to land right.
-function getImgCoords(e) {
-  const img = $('#dShot');
-  if (!img || !img.naturalWidth) return null;
-  const rect = img.getBoundingClientRect();
-  const fx = (e.clientX - rect.left) / rect.width;
-  const fy = (e.clientY - rect.top) / rect.height;
-  return { x: +Math.min(1, Math.max(0, fx)).toFixed(4), y: +Math.min(1, Math.max(0, fy)).toFixed(4) };
+// Where the pointer is on the computer's screen, as fractions 0..1 of the picture, so the
+// agent can multiply by its own screen size and land right whatever size the frame is.
+// The picture is drawn inside its box with empty bars beside or above it when their shapes
+// differ (object-fit: contain), so the box is not the picture: measure the picture itself.
+// Outside the picture there is no point on the screen: null.
+function imgPoint(e, img) {
+  if (!img.naturalWidth || !img.naturalHeight) return null;
+  const r = img.getBoundingClientRect(), bw = img.clientWidth, bh = img.clientHeight;
+  const k = Math.min(bw / img.naturalWidth, bh / img.naturalHeight);
+  const w = img.naturalWidth * k, h = img.naturalHeight * k;
+  const x = (e.clientX - r.left - img.clientLeft - (bw - w) / 2) / w;
+  const y = (e.clientY - r.top - img.clientTop - (bh - h) / 2) / h;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+  return { x: +x.toFixed(4), y: +y.toFixed(4) };
 }
+// Ctrl / Alt / Shift held with a key or a click. AltGr (which browsers report as Ctrl+Alt)
+// has already made its character, so it counts as none.
+const modsOf = (e) => (e.getModifierState && e.getModifierState('AltGraph')) ? []
+  : ['ctrl', 'alt', 'shift'].filter(m => e[m + 'Key']).concat(kbLocked && e.metaKey ? ['win'] : []);
 
-// Take Control button
-$('#remoteStart').addEventListener('click', () => {
-  if (!curId) return;
-  if (!live || live.id !== String(curId)) startLive(curId);   // see what you control
-  sendRemote('remote_start', '');
-  setRemoteUI(true);
-});
+$('#remoteStart').addEventListener('click', startControl);
+$('#remoteStop').addEventListener('click', () => endControl(''));
+$('#ctlStop').addEventListener('click', () => endControl(''));
 
-// Stop Control button — hand control back at once, with the command as a reliable backup.
-$('#remoteStop').addEventListener('click', () => {
-  queueInput({ t: 'stop' });
-  sendRemote('remote_stop', '');
-  setRemoteUI(false);
-});
+// Mouse, on the picture in the panel and on the same picture in full screen.
+for (const img of [$('#dShot'), $('#liveFsImg')]) {
+  img.addEventListener('mousemove', (e) => {
+    if (!ctlActive()) return;
+    const p = imgPoint(e, img);
+    if (!p) return;
+    lastPoint = p;
+    const now = Date.now();
+    if (now - lastMoveSent < 30) return;
+    lastMoveSent = now;
+    queueInput({ t: 'm', x: p.x, y: p.y });
+  });
+  img.addEventListener('mousedown', (e) => {
+    if (!ctlActive()) return;
+    e.preventDefault();                              // no text selection, no dragging of the picture itself
+    const p = imgPoint(e, img), b = BTN[e.button];
+    if (!p || !b) return;
+    lastPoint = p;
+    // Each event carries its own point, so a move can never arrive after it.
+    if (ctl.modern) { heldButtons.add(b); queueInput({ t: 'd', b, x: p.x, y: p.y, mods: modsOf(e) }); }
+    else if (b !== 'middle') queueInput({ t: 'c', b, x: p.x, y: p.y });
+  });
+  img.addEventListener('contextmenu', (e) => { if (ctlActive()) e.preventDefault(); });
+  img.addEventListener('wheel', (e) => {
+    if (!ctlActive()) return;
+    e.preventDefault();
+    // One notch of a mouse wheel is about 100; a touchpad sends many small steps.
+    wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+    const n = Math.trunc(wheelAcc / 100);
+    if (!n) return;
+    wheelAcc -= n * 100;
+    queueInput(ctl.modern ? { t: 's', dy: -Math.max(-5, Math.min(5, n)) } : { t: 's', d: n > 0 ? -3 : 3 });
+  }, { passive: false });
+}
+// A button is let go wherever the pointer is by then, also off the picture.
+function releaseButton(b, e) {
+  if (!heldButtons.delete(b) || !ctlActive()) return;
+  const img = $('#liveFs').classList.contains('on') ? $('#liveFsImg') : $('#dShot');
+  const p = (e && imgPoint(e, img)) || lastPoint;
+  queueInput(p ? { t: 'u', b, x: p.x, y: p.y } : { t: 'u', b });
+}
+window.addEventListener('mouseup', (e) => { if (BTN[e.button]) releaseButton(BTN[e.button], e); });
+window.addEventListener('blur', () => { [...heldButtons].forEach(b => releaseButton(b, null)); });
 
-// Mouse events on the live image
-$('#dShot').addEventListener('mousemove', (e) => {
-  if (!remoteActive()) return;
-  const now = Date.now();
-  if (now - lastMoveSent < 30) return;
-  lastMoveSent = now;
-  const c = getImgCoords(e);
-  if (c) queueInput({ t: 'm', x: c.x, y: c.y });
-});
-
-$('#dShot').addEventListener('mousedown', (e) => {
-  if (!remoteActive()) return;
-  e.preventDefault();
-  const c = getImgCoords(e);
-  // One event carries the point AND the click, so the move can never arrive after it.
-  if (c) queueInput({ t: 'c', b: e.button === 2 ? 'right' : 'left', x: c.x, y: c.y });
-});
-
-$('#dShot').addEventListener('contextmenu', (e) => {
-  if (remoteActive()) e.preventDefault();
-});
-
-$('#dShot').addEventListener('wheel', (e) => {
-  if (!remoteActive()) return;
-  e.preventDefault();
-  queueInput({ t: 's', d: e.deltaY > 0 ? -3 : 3 });
-}, { passive: false });
-
-// Keyboard (only when control is active)
+// Keyboard, while control is on. The key belongs to the computer, not to this page, so the
+// page's own reaction (F5 reload, Tab moving on, Ctrl+A selecting the page) is held back.
+const KEYS = { Enter:'enter', Tab:'tab', Escape:'esc', Backspace:'backspace', Delete:'delete', Insert:'insert', Home:'home', End:'end',
+               PageUp:'pageup', PageDown:'pagedown', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', ' ':'space',
+               ContextMenu:'menu' };
+const OLD_KEYS = new Set(['enter', 'tab', 'esc', 'backspace', 'delete', 'up', 'down', 'left', 'right', 'space', 'home', 'end', 'pageup', 'pagedown']);
 document.addEventListener('keydown', (e) => {
-  if (!remoteActive()) return;
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (!ctlActive()) return;
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;     // typing into this page's own fields
+  // The Windows key belongs to the owner's own computer - unless the browser has handed
+  // the system keys over (control in full screen): then it goes to the computer too.
+  if (e.metaKey && !kbLocked) return;
   e.preventDefault();
-  const special = {
-    'Enter': 'enter', 'Tab': 'tab', 'Escape': 'esc', 'Backspace': 'backspace',
-    'Delete': 'delete', 'ArrowUp': 'up', 'ArrowDown': 'down',
-    'ArrowLeft': 'left', 'ArrowRight': 'right', ' ': 'space',
-    'Home': 'home', 'End': 'end', 'PageUp': 'pageup', 'PageDown': 'pagedown'
-  };
-  if (special[e.key]) queueInput({ t: 'k', k: special[e.key] });
-  else if (e.key.length === 1) queueInput({ t: 'k', k: e.key });
+  if (e.key === 'Meta') { winAlone = true; return; }
+  winAlone = false;
+  let k = KEYS[e.key] || (/^F([1-9]|1[0-2])$/.test(e.key) ? e.key.toLowerCase() : null);
+  if (!k && [...e.key].length === 1) k = e.key;
+  if (!k) return;                                    // Shift, Ctrl, Alt, Caps Lock ... pressed on their own
+  const mods = modsOf(e);
+  if (ctl.modern) queueInput({ t: 'k', k, mods });
+  // An older agent would type the bare letter for Ctrl+C: better to send nothing.
+  else if (!mods.includes('ctrl') && !mods.includes('alt') && !mods.includes('win') && (k.length === 1 || OLD_KEYS.has(k))) queueInput({ t: 'k', k });
+});
+document.addEventListener('keyup', (e) => {          // the Windows key pressed on its own: the Start menu
+  if (e.key !== 'Meta' || !winAlone) return;
+  winAlone = false;
+  if (ctlActive() && kbLocked && ctl.modern) queueInput({ t: 'k', k: 'win', mods: [] });
 });
 
 // ---- boot: draw what we know, then ask ----

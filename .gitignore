@@ -8,3 +8,4 @@ agent/build/
 agent/build_spec/
 deploy/
 .playwright-mcp/
+server/config.local.php

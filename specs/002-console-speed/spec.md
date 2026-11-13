@@ -1,5 +1,12 @@
 # Spec: console speed
 
+> This is the record of one pass of work (4 Nov 2026), kept as it was written.
+> Since then: remote control was added as a visible, announced feature, so "No
+> remote control" under Constraints describes this pass only; live frames are
+> shown but only one in ten seconds is kept; and a one‑process server (PHP's
+> built‑in one) no longer holds pings or streams. The README has the present
+> state.
+
 ## Why
 
 The owner watches office computers from far away. Measured on the live site (4 Nov 2026):

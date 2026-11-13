@@ -1,0 +1,6 @@
+Employee Monitor agent.
+
+This file is packed into EmployeeMonitorAgent.exe and unpacked with it. It marks the
+temporary folder a running agent unpacked itself into, so that a later start of the agent
+can recognise and remove such a folder when Windows ended the agent (log-off, shut-down)
+before it could remove it itself.
