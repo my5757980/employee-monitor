@@ -1068,27 +1068,6 @@ function route(string $path, string $method, array $cfg): void
         exit;
     }
 
-    // The office cameras' own web page (e.g. Guarding Vision portal or the DVR's
-    // web page). We only store/return that address; the dashboard "Cameras" button
-    // opens it in a new tab. No camera video is streamed or stored by this server.
-    if ($path === '/api/admin/cameras' && $method === 'GET') {
-        require_admin();
-        json_out(['ok' => true, 'url' => setting('cameras_url')]);
-    }
-    if ($path === '/api/admin/cameras' && $method === 'POST') {
-        require_owner();
-        $b   = body();
-        $url = trim($b['url'] ?? '');
-        if ($url !== '' && !preg_match('#^https?://#i', $url)) {
-            fail('Enter a web address that starts with http:// or https://', 400);
-        }
-        $url = mb_substr($url, 0, 500);
-        x("INSERT INTO settings (skey, sval) VALUES ('cameras_url', ?)
-           ON DUPLICATE KEY UPDATE sval = VALUES(sval)", [$url]);
-        log_event(null, 'cameras', $url === '' ? 'link cleared' : 'link set');
-        json_out(['ok' => true, 'url' => $url]);
-    }
-
     // The activity / audit log: sign-ins, actions sent to computers, and settings
     // changes. Owner-only, because it shows every admin's actions on every computer.
     if ($path === '/api/admin/events' && $method === 'GET') {

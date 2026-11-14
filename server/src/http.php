@@ -566,7 +566,6 @@ function boot_payload(array $admin): array
         'role'           => $admin['role'],
         'devices'        => device_rows(),
         'sample_seconds' => em_config()['sample_seconds'],
-        'cameras_url'    => setting('cameras_url'),
     ];
 }
 

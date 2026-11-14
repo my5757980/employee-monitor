@@ -77,10 +77,6 @@ body.ro .owner-act{display:none!important}</style>
         <p id="counts" class="text-xs text-slate-500 leading-tight truncate"></p>
       </div>
       <div class="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
-        <button id="camBtn" class="text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-2.5 sm:px-3 py-1.5 font-semibold" title="Open the office cameras">
-          <span class="sm:hidden">📹</span><span class="hidden sm:inline">📹 Cameras</span>
-        </button>
-        <button id="camCfg" class="hidden text-sm text-slate-500 hover:text-slate-800 px-1" title="Change the cameras address">⚙</button>
         <button id="logBtn" class="hidden text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg px-2.5 sm:px-3 py-1.5 font-semibold" title="Activity &amp; sign-in log"><span class="sm:hidden">📜</span><span class="hidden sm:inline">📜 Log</span></button>
         <button id="addBtn" class="text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-2.5 sm:px-3 py-1.5 font-semibold">
           <span class="sm:hidden">+ Add</span><span class="hidden sm:inline">+ Add computer</span>
@@ -321,23 +317,6 @@ body.ro .owner-act{display:none!important}</style>
   </div>
 </div>
 
-<!-- Cameras: opens the office camera system's OWN web page (e.g. Guarding Vision
-     or the DVR). This dashboard does not restream or store any camera video. -->
-<div id="camModal" class="hidden fixed inset-0 z-30 bg-black/50 p-4 grid place-items-center">
-  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-6">
-    <h2 class="font-bold text-lg mb-1">Office cameras</h2>
-    <p class="text-sm text-slate-500 mb-4">Opens your camera system’s own web page (Guarding Vision, or the DVR’s web page) in a new tab — the same cameras you watch on the phone app. Paste the address once; after that the button opens it directly.</p>
-    <label class="block text-xs font-semibold text-slate-600 mb-1">Cameras web address</label>
-    <input id="camUrl" class="w-full border rounded-lg px-3 py-2 mb-4" placeholder="https://… (Guarding Vision / DVR page)">
-    <div class="flex gap-2">
-      <button id="camOpen" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg py-2 font-semibold">Open cameras</button>
-      <button id="camSave" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 font-semibold">Save</button>
-    </div>
-    <p id="camMsg" class="text-sm mt-3 hidden"></p>
-    <button id="camClose" class="w-full text-slate-500 hover:text-slate-800 text-sm mt-3">Close</button>
-  </div>
-</div>
-
 <div id="liveFs"><span class="fsclose">&times;</span><span class="fsexit">■ Leave full screen</span><img id="liveFsImg" draggable="false"></div>
 <script>
 // The server answers in about 3 ms, but it is far away: each trip takes 300-400 ms.
@@ -402,10 +381,8 @@ function applyBoot(d) {
   showApp(d.name);
   myRole = d.role || 'owner';
   applyRole();
-  camUrl = d.cameras_url || '';
-  paintCam();
   applyDevices(d.devices);
-  saved.write({ at: Date.now(), name: d.name, role: myRole, devices: d.devices, cameras_url: camUrl });
+  saved.write({ at: Date.now(), name: d.name, role: myRole, devices: d.devices });
   startTimers();
 }
 function signedOut() {
@@ -477,7 +454,7 @@ async function refreshGrid() {
     const d = await api('/api/admin/devices');
     if (asked !== changes) return;
     applyDevices(d.devices);
-    saved.write({ at: Date.now(), name: $('#who').textContent, role: myRole, devices: d.devices, cameras_url: camUrl });
+    saved.write({ at: Date.now(), name: $('#who').textContent, role: myRole, devices: d.devices });
   } catch (e) {
     if (e.status !== 401) setText($('#counts'), 'Reconnecting…');
   }
@@ -1530,13 +1507,12 @@ function applyRole() {
   document.body.classList.toggle('ro', !owner);
   $('#logBtn').classList.toggle('hidden', !owner);
   $('#addBtn').classList.toggle('hidden', !owner);
-  paintCam();
 }
 async function openLog() {
   $('#logModal').classList.remove('hidden');
   const box = $('#logList');
   setHtml(box, SKELETON);
-  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent', enroll_key: 'Install key', device_renamed: 'Computer renamed', recording: 'Recording' };
+  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent', enroll_key: 'Install key', device_renamed: 'Computer renamed', recording: 'Recording' };
   try {
     const r = await api('/api/admin/events');
     if (!r.events.length) { setHtml(box, '<p class=\"text-slate-500 py-4 text-center\">Nothing yet.</p>'); return; }
@@ -1566,44 +1542,6 @@ $('#addMake').addEventListener('click', async () => {
 });
 $('#addCopy').addEventListener('click', () => copyText($('#addKey').textContent, $('#addCopy')));
 $('#addCmdCopy').addEventListener('click', () => copyText($('#addCmd').textContent, $('#addCmdCopy')));
-
-// ---- cameras: open the office camera system's OWN web page (no restreaming) ----
-let camUrl = '';
-const camValid = (u) => /^https?:\/\//i.test(u);
-function paintCam() {
-  $('#camCfg').classList.toggle('hidden', !camUrl || myRole !== 'owner');
-  // Only the owner can save the address, so with none saved a read-only account has nothing to open.
-  $('#camBtn').classList.toggle('hidden', !camUrl && myRole !== 'owner');
-}
-function camSetMsg(t, bad) { const m = $('#camMsg'); m.textContent = t; m.className = 'text-sm mt-3 ' + (bad ? 'text-red-600' : 'text-emerald-600'); m.classList.remove('hidden'); }
-function camEdit() {
-  $('#camUrl').value = camUrl;
-  $('#camMsg').classList.add('hidden');
-  $('#camModal').classList.remove('hidden');
-}
-// Address saved: one click opens the cameras. None yet: ask for it.
-$('#camBtn').addEventListener('click', () => { if (camUrl) window.open(camUrl, '_blank', 'noopener'); else camEdit(); });
-$('#camCfg').addEventListener('click', camEdit);
-$('#camClose').addEventListener('click', () => $('#camModal').classList.add('hidden'));
-async function camSave(url) {
-  const d = await api('/api/admin/cameras', postJson({ url }));
-  camUrl = d.url;
-  paintCam();
-  saved.write({ at: Date.now(), name: $('#who').textContent, role: myRole, devices, cameras_url: camUrl });
-}
-$('#camSave').addEventListener('click', async () => {
-  const url = $('#camUrl').value.trim();
-  camSetMsg('Saving…', false);
-  try { await camSave(url); camSetMsg('Saved.', false); } catch (e) { camSetMsg(e.message || 'Could not save.', true); }
-});
-$('#camOpen').addEventListener('click', () => {
-  const url = $('#camUrl').value.trim();
-  if (!url) { camSetMsg('Paste the cameras web address first.', true); return; }
-  if (!camValid(url)) { camSetMsg('Enter a web address that starts with http:// or https://', true); return; }
-  window.open(url, '_blank', 'noopener');   // inside the click itself, so no browser blocks it
-  $('#camModal').classList.add('hidden');
-  if (url !== camUrl) camSave(url).catch(() => {});
-});
 
 // ---- send a notice (text + voice + picture) to one / several / all computers ----
 let ntDeviceId = 0, ntVoiceBlob = null, ntPicture = null;
@@ -1993,8 +1931,6 @@ let shellChanged = false;
     showApp(last.name);
     myRole = last.role || 'owner';
     applyRole();
-    camUrl = last.cameras_url || '';
-    paintCam();
     applyDevices(last.devices);
   }
   refreshBoot();
