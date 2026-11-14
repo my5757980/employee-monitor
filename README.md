@@ -18,7 +18,7 @@ separate from anything else.
 
 | Part | What it is | Where it runs |
 |---|---|---|
-| **agent** (`agent/`) | A small Python program (built to one `.exe`). Sends the active app/window, idle state and a screenshot every minute; runs the owner's actions (notice, lock, log off, restart, shut down, live view, record, remote control) and enforces blocked apps/sites. | each company computer |
+| **agent** (`agent/`) | A small Python program (built to one `.exe`). Sends the active app/window, idle state and a screenshot every minute; runs the owner's actions (notice, lock, restart, shut down, live view, record, remote control) and enforces blocked apps/sites. | each company computer |
 | **server** (`server/`) | Plain PHP 8 + MySQL. Stores everything; one API for the agents, one for the dashboard. | your web host (PHP + MySQL) |
 | **dashboard** (`server/public/dashboard.html`) | The web page the owner/managers sign in to: live grid of computers, detail (screenshots, playback, activity, the day's report), controls and restrictions. | any browser |
 
@@ -50,10 +50,24 @@ separate from anything else.
 - **Notice**: a message with an optional picture and voice clip, to one,
   several or all computers. A computer that is switched off shows it when it is
   next on (for up to 3 days).
-- **Lock, log off, restart, shut down**, and **record**: a frame every 4
-  seconds for five minutes, kept for Playback. The button counts down while it
-  records and the same button stops it; the new frames appear in Playback by
-  themselves.
+- **Lock, restart, shut down.**
+- **Record**: a video of one computer's screen. Press *Record*, choose how
+  long (1 to 30 minutes), and the computer sends about one picture a second
+  for that time, and only when the screen has changed, so a quiet screen costs
+  little (a 1366×768 screen that changes every second takes about 7 MB of the
+  server's disk a minute). It goes on with the dashboard closed, the button
+  counts down, and the same button stops it early. Every recording is saved on
+  the server and listed on that computer's **Recordings** tab:
+  - *Play* shows it at the pace it was recorded (or 2×, 4×, 8×), with a bar to
+    jump to any moment;
+  - *Download* gives it as one video file (`.avi`, Motion‑JPEG: Windows' own
+    players and VLC open it) to keep or pass on;
+  - *Delete* removes it from the server.
+
+  Recordings are kept for 30 days (`EM_RECORDING_DAYS`) and then deleted by the
+  daily cleanup; download one to keep it longer. Only a computer that is on can
+  record. Where nothing could be recorded (it was switched off, asleep or
+  locked) the list says so instead of showing an empty recording.
 - **Restrictions** per computer: programs that are closed as soon as they
   start (`vlc` or `vlc.exe`), and web sites that do not open. A site is blocked
   by name: `youtube.com` also blocks `www.` and `m.youtube.com`; any other name
@@ -107,8 +121,9 @@ separate from anything else.
   host. Run `migrate` again after every update of the code: it adds what a new
   version needs and changes nothing else.
 - Add a daily `php tool.php cleanup` (cron / Task Scheduler). It deletes
-  screenshots and activity older than the retention setting, old notices, and
-  makes room when the disk is nearly full.
+  screenshots and activity older than the retention setting, recordings older
+  than theirs, old notices, and makes room when the disk is nearly full (the
+  oldest pictures go first, screenshots and recordings alike).
 - Each computer's waiting ping keeps one web‑server worker busy for up to 15
   seconds. Give the server more workers than computers, or set
   `EM_PING_HOLD_MAX` to the number it can spare; above that number of computers
@@ -149,8 +164,10 @@ Good to know:
   everything else works and the agent's log says what it could not do.
 - The agent's log is `%APPDATA%\EmployeeMonitor\agent.log` (per user); the
   installer's is `%ProgramData%\EmployeeMonitor\install.log`.
-- An agent from before version 1.3.0 keeps working with a newer server, but
-  only version 1.3.0 has the fixes on the computer's side, so update them.
+- An older agent keeps working with a newer server, but update it: the fixes
+  on the computer's side came with version 1.3.0, and from 1.4.0 a recording
+  has a picture every second (an older agent records one every 4 seconds; the
+  Recordings tab says so for that computer).
 
 ## Configuration (environment variables, or `server/config.local.php`)
 
@@ -163,6 +180,7 @@ Good to know:
 | `EM_SAMPLE_SECONDS` | how often the agent samples | `60` |
 | `EM_IDLE_SECONDS` | no keyboard or mouse for this long counts as idle | `180` |
 | `EM_RETENTION_DAYS` | how long screenshots and activity are kept | `14` |
+| `EM_RECORDING_DAYS` | how long a recording is kept | `30` |
 | `EM_LIVE_KEEP_SECONDS` | during live view, keep one frame in this many seconds (`0` = every frame) | `10` |
 | `EM_NOTICE_HOURS` | how long a notice waits for a computer that is off | `72` |
 | `EM_PING_HOLD` | seconds a computer's ping may wait so a new action reaches it at once (`0` = off) | `15` |

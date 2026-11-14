@@ -65,7 +65,7 @@ A held ping must never hurt monitoring:
 - It never holds while frames are flowing (live or record).
 - It never holds on a computer with blocked applications, because the block is enforced on each ping.
 - It always ends before the next activity sample is due, so a network that cuts held pings cannot stop samples.
-- An action handed to a computer that dropped off is offered again on its next ping, for 3 minutes, except Log off, Restart and Shut down. Those are never run twice: the owner sees they never said done.
+- An action handed to a computer that dropped off is offered again on its next ping, for 3 minutes, except Restart and Shut down. Those are never run twice: the owner sees they never said done.
 - If a network cuts a held ping, that computer goes back to quick pings for an hour.
 - `EM_PING_HOLD=0` turns the hold off completely.
 

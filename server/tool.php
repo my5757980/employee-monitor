@@ -4,7 +4,7 @@
 //   php tool.php migrate                 create the database + tables (db/schema.sql)
 //   php tool.php admin <user> <pass> [name] [owner|manager]   create / reset a dashboard login
 //   php tool.php enroll [label]          make an enrollment key for one PC
-//   php tool.php cleanup                  delete screenshots older than retention_days
+//   php tool.php cleanup                  delete screenshots older than retention_days, and old recordings
 //   php tool.php status                   quick counts
 //
 // Deploy note: set EM_DB_* / EM_DATA_DIR in the environment on the host (or in
@@ -141,6 +141,33 @@ switch ($cmd) {
         }
         db()->exec('DELETE FROM notices WHERE created_at < (NOW() - INTERVAL 30 DAY)');
 
+        // Recordings: finish the ones whose time is up, then delete those older than the
+        // setting (EM_RECORDING_DAYS) with their pictures. One in which nothing was
+        // recorded is only a line on the dashboard: it goes after two days.
+        $rgone = 0;
+        try {
+            foreach (q("SELECT DISTINCT device_id FROM recordings WHERE status IN ('waiting','recording')") as $row) {
+                rec_settle((int) $row['device_id']);
+            }
+            $rdays = max(1, (int) em_config()['recording_days']);
+            foreach (q("SELECT id FROM recordings WHERE status IN ('done','failed') AND
+                        (created_at < (NOW() - INTERVAL ? DAY) OR (status = 'failed' AND created_at < (NOW() - INTERVAL 2 DAY)))",
+                    [$rdays]) as $row) {
+                rec_delete((int) $row['id']);
+                $rgone++;
+            }
+            // A folder of pictures whose recording is no longer listed: nothing shows it.
+            foreach ((array) @glob(em_config()['data_dir'] . '/recs/*', GLOB_ONLYDIR) as $dir) {
+                $rid = basename((string) $dir);
+                if (ctype_digit($rid) && !q1('SELECT id FROM recordings WHERE id = ?', [(int) $rid])) {
+                    foreach ((array) @glob($dir . '/*') as $f) {
+                        @unlink($f);
+                    }
+                    @rmdir($dir);
+                }
+            }
+        } catch (PDOException $e) { /* no recordings on this database yet: run migrate */ }
+
         // Passing live frames (shown, not kept) that were still on disk when a live
         // view ended: nothing reads them any more.
         $tgone = 0;
@@ -150,16 +177,16 @@ switch ($cmd) {
             }
         }
 
-        // Disk guard: whatever the retention setting, never let the screenshots disk
-        // fill up. If free space is low, delete the oldest screenshots (across all
-        // computers) in batches until there is room again (~600 MB free).
+        // Disk guard: whatever the retention settings, never let the pictures disk
+        // fill up. If free space is low, delete the oldest pictures (screenshots across
+        // all computers, and finished recordings) until there is room again (~600 MB free).
         $freed = disk_guard(600 * 1024 * 1024);
         echo "Removed $gone old screenshots and old activity.\n";
-        if ($ngone || $tgone) {
-            echo "Also removed $ngone old notices and $tgone left-over live frames.\n";
+        if ($ngone || $tgone || $rgone) {
+            echo "Also removed $ngone old notices, $rgone old recordings and $tgone left-over live frames.\n";
         }
         if ($freed) {
-            echo "Disk guard: removed $freed more oldest screenshots to keep the disk from filling.\n";
+            echo "Disk guard: removed $freed more of the oldest pictures to keep the disk from filling.\n";
         }
         break;
 
@@ -168,6 +195,12 @@ switch ($cmd) {
         echo 'Devices:     ' . (q1('SELECT COUNT(*) c FROM devices')['c'] ?? 0) . "\n";
         echo 'Activity:    ' . (q1('SELECT COUNT(*) c FROM activity')['c'] ?? 0) . "\n";
         echo 'Screenshots: ' . (q1('SELECT COUNT(*) c FROM screenshots')['c'] ?? 0) . "\n";
+        try {
+            $rec = q1("SELECT COUNT(*) c, COALESCE(SUM(bytes), 0) b FROM recordings WHERE status = 'done'");
+            echo 'Recordings:  ' . ($rec['c'] ?? 0) . ' (' . round(($rec['b'] ?? 0) / 1048576) . " MB)\n";
+        } catch (PDOException $e) {
+            echo "Recordings:  none yet (run: php tool.php migrate)\n";
+        }
         $free = @disk_free_space(em_config()['data_dir']);
         if ($free !== false) {
             echo 'Disk free:   ' . round($free / 1048576) . " MB (pictures folder)\n";

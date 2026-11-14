@@ -33,12 +33,19 @@
   #ctlBar button:hover { background:rgba(255,255,255,.32); }
   .cmdkey { background:#f1f5f9; border-radius:.5rem; padding:.5rem .75rem; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.75rem; overflow-wrap:anywhere; user-select:all; -webkit-user-select:all; }
   input[type=range] { accent-color:#4f46e5; }
+  #rpSlider { accent-color:#fb7185; }
+  /* "recording now": a mark on the tab's corner that takes no room, so the tabs never shift */
+  #recDot { position:absolute; top:0; right:-9px; font-size:10px; line-height:1; color:#dc2626; }
+  .rpSpeed { background:#334155; }
+  .rpSpeed.on { background:#fff; color:#1e293b; font-weight:600; }
+  .recLen { background:#f1f5f9; color:#334155; }
+  .recLen.on { background:#e11d48; color:#fff; }
   .scrollx::-webkit-scrollbar { height: 0; }
   .thin::-webkit-scrollbar { width: 7px; height: 7px; }
   .thin::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius: 4px; }
 </style>
 <!-- Compiled by server/tools/build_css.py. Do not edit by hand. -->
-<style>/* tailwind:start */*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.14 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.bottom-2{bottom:.5rem}.left-2{left:.5rem}.right-2{right:.5rem}.top-0{top:0}.top-2{top:.5rem}.z-10{z-index:10}.z-20{z-index:20}.z-30{z-index:30}.col-span-2{grid-column:span 2/span 2}.mx-auto{margin-left:auto;margin-right:auto}.my-1{margin-top:.25rem;margin-bottom:.25rem}.my-6{margin-top:1.5rem;margin-bottom:1.5rem}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.ml-2{margin-left:.5rem}.ml-6{margin-left:1.5rem}.ml-auto{margin-left:auto}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.block{display:block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-14{height:3.5rem}.h-3{height:.75rem}.h-8{height:2rem}.h-9{height:2.25rem}.max-h-24{max-height:6rem}.max-h-40{max-height:10rem}.max-h-\[22rem\]{max-height:22rem}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-14{width:3.5rem}.w-16{width:4rem}.w-28{width:7rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-full{width:100%}.min-w-0{min-width:0}.max-w-7xl{max-width:80rem}.max-w-\[90\%\]{max-width:90%}.max-w-\[9rem\]{max-width:9rem}.max-w-lg{max-width:32rem}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}@keyframes pulse{50%{opacity:.5}}.animate-pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}.cursor-pointer{cursor:pointer}.select-all{-webkit-user-select:all;-moz-user-select:all;user-select:all}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.place-items-center{place-items:center}.items-center{align-items:center}.justify-center{justify-content:center}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.overflow-auto{overflow:auto}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-b-2{border-bottom-width:2px}.border-indigo-600{--tw-border-opacity:1;border-color:rgb(79 70 229/var(--tw-border-opacity))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249/var(--tw-border-opacity))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity))}.border-transparent{border-color:transparent}.bg-amber-600{--tw-bg-opacity:1;background-color:rgb(217 119 6/var(--tw-bg-opacity))}.bg-black\/50{background-color:rgba(0,0,0,.5)}.bg-black\/55{background-color:rgba(0,0,0,.55)}.bg-emerald-500\/90{background-color:rgba(16,185,129,.9)}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105/var(--tw-bg-opacity))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity))}.bg-orange-600{--tw-bg-opacity:1;background-color:rgb(234 88 12/var(--tw-bg-opacity))}.bg-red-50{--tw-bg-opacity:1;background-color:rgb(254 242 242/var(--tw-bg-opacity))}.bg-red-600{--tw-bg-opacity:1;background-color:rgb(220 38 38/var(--tw-bg-opacity))}.bg-rose-600{--tw-bg-opacity:1;background-color:rgb(225 29 72/var(--tw-bg-opacity))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity))}.bg-slate-700{--tw-bg-opacity:1;background-color:rgb(51 65 85/var(--tw-bg-opacity))}.bg-slate-700\/80{background-color:rgba(51,65,85,.8)}.bg-slate-800{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.bg-slate-900\/60{background-color:rgba(15,23,42,.6)}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity))}.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.p-7{padding:1.75rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-16{padding-top:4rem;padding-bottom:4rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.pb-2{padding-bottom:.5rem}.pr-1{padding-right:.25rem}.text-center{text-align:center}.text-right{text-align:right}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace}.text-2xl{font-size:1.5rem;line-height:2rem}.text-\[10px\]{font-size:10px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.leading-none{line-height:1}.leading-tight{line-height:1.25}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6/var(--tw-text-opacity))}.text-emerald-600{--tw-text-opacity:1;color:rgb(5 150 105/var(--tw-text-opacity))}.text-red-600{--tw-text-opacity:1;color:rgb(220 38 38/var(--tw-text-opacity))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity))}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color),0 1px 2px -1px var(--tw-shadow-color)}.shadow,.shadow-lg{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgba(0,0,0,.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color)}.shadow-sm,.shadow-xl{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-xl{--tw-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1);--tw-shadow-colored:0 20px 25px -5px var(--tw-shadow-color),0 8px 10px -6px var(--tw-shadow-color)}.ring-2{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-indigo-400{--tw-ring-opacity:1;--tw-ring-color:rgb(129 140 248/var(--tw-ring-opacity))}.ring-offset-2{--tw-ring-offset-width:2px}.blur{--tw-blur:blur(8px)}.blur,.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.hover\:bg-amber-700:hover{--tw-bg-opacity:1;background-color:rgb(180 83 9/var(--tw-bg-opacity))}.hover\:bg-black\/80:hover{background-color:rgba(0,0,0,.8)}.hover\:bg-emerald-700:hover{--tw-bg-opacity:1;background-color:rgb(4 120 87/var(--tw-bg-opacity))}.hover\:bg-indigo-700:hover{--tw-bg-opacity:1;background-color:rgb(67 56 202/var(--tw-bg-opacity))}.hover\:bg-orange-700:hover{--tw-bg-opacity:1;background-color:rgb(194 65 12/var(--tw-bg-opacity))}.hover\:bg-red-100:hover{--tw-bg-opacity:1;background-color:rgb(254 226 226/var(--tw-bg-opacity))}.hover\:bg-red-700:hover{--tw-bg-opacity:1;background-color:rgb(185 28 28/var(--tw-bg-opacity))}.hover\:bg-rose-700:hover{--tw-bg-opacity:1;background-color:rgb(190 18 60/var(--tw-bg-opacity))}.hover\:bg-slate-200:hover{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.hover\:bg-slate-300:hover{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity))}.hover\:bg-slate-800:hover{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.hover\:bg-slate-900:hover{--tw-bg-opacity:1;background-color:rgb(15 23 42/var(--tw-bg-opacity))}.hover\:text-slate-700:hover{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.hover\:text-slate-800:hover{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.hover\:ring-2:hover{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.hover\:ring-indigo-200:hover{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity))}.group:hover .group-hover\:opacity-95{opacity:.95}@media (min-width:640px){.sm\:col-auto{grid-column:auto}.sm\:mx-auto{margin-left:auto;margin-right:auto}.sm\:my-2{margin-top:.5rem;margin-bottom:.5rem}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:hidden{display:none}.sm\:min-h-0{min-height:0}.sm\:max-w-6xl{max-width:72rem}.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:flex-wrap{flex-wrap:wrap}.sm\:gap-2{gap:.5rem}.sm\:gap-3{gap:.75rem}.sm\:gap-4{gap:1rem}.sm\:gap-5{gap:1.25rem}.sm\:rounded-2xl{border-radius:1rem}.sm\:rounded-t-2xl{border-top-left-radius:1rem;border-top-right-radius:1rem}.sm\:p-4{padding:1rem}.sm\:px-3{padding-left:.75rem;padding-right:.75rem}.sm\:px-5{padding-left:1.25rem;padding-right:1.25rem}.sm\:py-24{padding-top:6rem;padding-bottom:6rem}.sm\:py-6{padding-top:1.5rem;padding-bottom:1.5rem}.sm\:text-lg{font-size:1.125rem;line-height:1.75rem}}@media (min-width:768px){.md\:inline{display:inline}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}@media (min-width:1024px){.lg\:max-h-\[30rem\]{max-height:30rem}}@media (min-width:1280px){.xl\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}@media (min-width:1536px){.\32xl\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}/* tailwind:end */
+<style>/* tailwind:start */*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.14 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.visible{visibility:visible}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.bottom-2{bottom:.5rem}.left-2{left:.5rem}.right-2{right:.5rem}.top-0{top:0}.top-2{top:.5rem}.z-10{z-index:10}.z-20{z-index:20}.z-30{z-index:30}.col-span-2{grid-column:span 2/span 2}.mx-auto{margin-left:auto;margin-right:auto}.my-1{margin-top:.25rem;margin-bottom:.25rem}.my-6{margin-top:1.5rem;margin-bottom:1.5rem}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.ml-2{margin-left:.5rem}.ml-6{margin-left:1.5rem}.ml-auto{margin-left:auto}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.block{display:block}.flex{display:flex}.inline-flex{display:inline-flex}.grid{display:grid}.hidden{display:none}.h-1\.5{height:.375rem}.h-14{height:3.5rem}.h-3{height:.75rem}.h-8{height:2rem}.h-9{height:2.25rem}.max-h-24{max-height:6rem}.max-h-40{max-height:10rem}.max-h-\[22rem\]{max-height:22rem}.min-h-screen{min-height:100vh}.w-1\.5{width:.375rem}.w-14{width:3.5rem}.w-16{width:4rem}.w-28{width:7rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-full{width:100%}.min-w-0{min-width:0}.max-w-7xl{max-width:80rem}.max-w-\[90\%\]{max-width:90%}.max-w-\[9rem\]{max-width:9rem}.max-w-lg{max-width:32rem}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}@keyframes pulse{50%{opacity:.5}}.animate-pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}.cursor-pointer{cursor:pointer}.select-all{-webkit-user-select:all;-moz-user-select:all;user-select:all}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.flex-wrap{flex-wrap:wrap}.place-items-center{place-items:center}.items-center{align-items:center}.justify-center{justify-content:center}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.overflow-auto{overflow:auto}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-b-2{border-bottom-width:2px}.border-indigo-600{--tw-border-opacity:1;border-color:rgb(79 70 229/var(--tw-border-opacity))}.border-slate-100{--tw-border-opacity:1;border-color:rgb(241 245 249/var(--tw-border-opacity))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity))}.border-transparent{border-color:transparent}.bg-black\/50{background-color:rgba(0,0,0,.5)}.bg-black\/55{background-color:rgba(0,0,0,.55)}.bg-emerald-500\/90{background-color:rgba(16,185,129,.9)}.bg-emerald-600{--tw-bg-opacity:1;background-color:rgb(5 150 105/var(--tw-bg-opacity))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity))}.bg-orange-600{--tw-bg-opacity:1;background-color:rgb(234 88 12/var(--tw-bg-opacity))}.bg-red-50{--tw-bg-opacity:1;background-color:rgb(254 242 242/var(--tw-bg-opacity))}.bg-red-600{--tw-bg-opacity:1;background-color:rgb(220 38 38/var(--tw-bg-opacity))}.bg-rose-600{--tw-bg-opacity:1;background-color:rgb(225 29 72/var(--tw-bg-opacity))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity))}.bg-slate-700{--tw-bg-opacity:1;background-color:rgb(51 65 85/var(--tw-bg-opacity))}.bg-slate-700\/80{background-color:rgba(51,65,85,.8)}.bg-slate-800{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.bg-slate-900\/60{background-color:rgba(15,23,42,.6)}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity))}.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.p-7{padding:1.75rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-16{padding-top:4rem;padding-bottom:4rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.pb-2{padding-bottom:.5rem}.pr-1{padding-right:.25rem}.text-center{text-align:center}.text-right{text-align:right}.font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace}.text-2xl{font-size:1.5rem;line-height:2rem}.text-\[10px\]{font-size:10px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-medium{font-weight:500}.font-semibold{font-weight:600}.leading-none{line-height:1}.leading-tight{line-height:1.25}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6/var(--tw-text-opacity))}.text-emerald-600{--tw-text-opacity:1;color:rgb(5 150 105/var(--tw-text-opacity))}.text-red-600{--tw-text-opacity:1;color:rgb(220 38 38/var(--tw-text-opacity))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity))}.opacity-60{opacity:.6}.shadow{--tw-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color),0 1px 2px -1px var(--tw-shadow-color)}.shadow,.shadow-lg{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-lg{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgba(0,0,0,.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color)}.shadow-sm,.shadow-xl{box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.shadow-xl{--tw-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1);--tw-shadow-colored:0 20px 25px -5px var(--tw-shadow-color),0 8px 10px -6px var(--tw-shadow-color)}.ring-2{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-indigo-400{--tw-ring-opacity:1;--tw-ring-color:rgb(129 140 248/var(--tw-ring-opacity))}.ring-offset-2{--tw-ring-offset-width:2px}.blur{--tw-blur:blur(8px)}.blur,.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.hover\:bg-black\/80:hover{background-color:rgba(0,0,0,.8)}.hover\:bg-emerald-700:hover{--tw-bg-opacity:1;background-color:rgb(4 120 87/var(--tw-bg-opacity))}.hover\:bg-indigo-700:hover{--tw-bg-opacity:1;background-color:rgb(67 56 202/var(--tw-bg-opacity))}.hover\:bg-orange-700:hover{--tw-bg-opacity:1;background-color:rgb(194 65 12/var(--tw-bg-opacity))}.hover\:bg-red-100:hover{--tw-bg-opacity:1;background-color:rgb(254 226 226/var(--tw-bg-opacity))}.hover\:bg-red-700:hover{--tw-bg-opacity:1;background-color:rgb(185 28 28/var(--tw-bg-opacity))}.hover\:bg-rose-700:hover{--tw-bg-opacity:1;background-color:rgb(190 18 60/var(--tw-bg-opacity))}.hover\:bg-slate-200:hover{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity))}.hover\:bg-slate-300:hover{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity))}.hover\:bg-slate-800:hover{--tw-bg-opacity:1;background-color:rgb(30 41 59/var(--tw-bg-opacity))}.hover\:bg-slate-900:hover{--tw-bg-opacity:1;background-color:rgb(15 23 42/var(--tw-bg-opacity))}.hover\:text-slate-700:hover{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity))}.hover\:text-slate-800:hover{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity))}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color),0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.hover\:ring-2:hover{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.hover\:ring-indigo-200:hover{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity))}.group:hover .group-hover\:opacity-95{opacity:.95}@media (min-width:640px){.sm\:col-auto{grid-column:auto}.sm\:mx-auto{margin-left:auto;margin-right:auto}.sm\:my-2{margin-top:.5rem;margin-bottom:.5rem}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:hidden{display:none}.sm\:min-h-0{min-height:0}.sm\:max-w-6xl{max-width:72rem}.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:flex-wrap{flex-wrap:wrap}.sm\:gap-2{gap:.5rem}.sm\:gap-3{gap:.75rem}.sm\:gap-4{gap:1rem}.sm\:gap-5{gap:1.25rem}.sm\:rounded-2xl{border-radius:1rem}.sm\:rounded-t-2xl{border-top-left-radius:1rem;border-top-right-radius:1rem}.sm\:p-4{padding:1rem}.sm\:px-3{padding-left:.75rem;padding-right:.75rem}.sm\:px-5{padding-left:1.25rem;padding-right:1.25rem}.sm\:py-24{padding-top:6rem;padding-bottom:6rem}.sm\:py-6{padding-top:1.5rem;padding-bottom:1.5rem}.sm\:text-lg{font-size:1.125rem;line-height:1.75rem}}@media (min-width:768px){.md\:inline{display:inline}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}@media (min-width:1024px){.lg\:max-h-\[30rem\]{max-height:30rem}}@media (min-width:1280px){.xl\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}@media (min-width:1536px){.\32xl\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}/* tailwind:end */
 body.ro .owner-act{display:none!important}</style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -124,24 +131,48 @@ body.ro .owner-act{display:none!important}</style>
         </div>
         <p id="ctlMsg" class="hidden text-xs text-amber-600 mt-1"></p>
         <p id="dShotTs" class="text-xs text-slate-400 mt-1"></p>
-        <div class="mt-4 bg-slate-50 rounded-lg p-3">
+        <!-- The player of one recording, opened from the Recordings tab. While it is
+             open it takes the place of the screenshot playback below. -->
+        <div id="rpBox" class="hidden mt-4 bg-slate-800 text-white rounded-lg p-3">
           <div class="flex items-center gap-2 mb-2">
-            <h3 class="font-semibold text-sm">Playback</h3>
-            <button id="playBtn" class="text-xs bg-slate-800 text-white rounded px-2 py-1">▶ Play</button>
-            <span id="recBadge" class="hidden text-xs font-semibold text-red-600"></span>
-            <span id="playTs" class="text-xs text-slate-500 ml-auto"></span>
+            <span class="shrink-0 text-xs font-semibold bg-rose-600 rounded px-1.5 py-0.5">Recording</span>
+            <h3 id="rpTitle" class="font-semibold text-sm truncate min-w-0"></h3>
+            <button id="rpClose" class="ml-auto shrink-0 text-xs bg-slate-700 hover:bg-slate-900 rounded px-2 py-1">✕ Close</button>
           </div>
-          <input id="playSlider" type="range" min="0" max="0" value="0" class="w-full">
-          <p class="text-xs text-slate-400 mt-1">Scrub through this computer’s recorded frames.</p>
+          <div class="flex items-center gap-2">
+            <button id="rpPlay" class="shrink-0 text-xs bg-white text-slate-800 rounded px-2 py-1 font-semibold">▶ Play</button>
+            <input id="rpSlider" type="range" min="0" max="0" value="0" class="w-full">
+            <span id="rpTime" class="shrink-0 text-xs font-mono"></span>
+          </div>
+          <div class="flex items-center gap-1.5 mt-2 text-xs">
+            <span class="text-slate-400">Speed</span>
+            <button data-speed="1" class="rpSpeed rounded px-2 py-0.5">1×</button>
+            <button data-speed="2" class="rpSpeed rounded px-2 py-0.5">2×</button>
+            <button data-speed="4" class="rpSpeed rounded px-2 py-0.5">4×</button>
+            <button data-speed="8" class="rpSpeed rounded px-2 py-0.5">8×</button>
+            <a id="rpDown" download class="ml-auto bg-slate-700 hover:bg-slate-900 rounded px-2 py-1">⬇ Download video</a>
+          </div>
         </div>
-        <h3 class="font-semibold text-sm mt-4 mb-2">Recent screenshots</h3>
-        <div id="dHistory" class="grid grid-cols-4 gap-2"></div>
+        <div id="playBox">
+          <div class="mt-4 bg-slate-50 rounded-lg p-3">
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="font-semibold text-sm">Playback</h3>
+              <button id="playBtn" class="text-xs bg-slate-800 text-white rounded px-2 py-1">▶ Play</button>
+              <span id="playTs" class="text-xs text-slate-500 ml-auto"></span>
+            </div>
+            <input id="playSlider" type="range" min="0" max="0" value="0" class="w-full">
+            <p class="text-xs text-slate-400 mt-1">Scrub through this computer’s screenshots (about one a minute). A recording is played from the <b>Recordings</b> tab.</p>
+          </div>
+          <h3 class="font-semibold text-sm mt-4 mb-2">Recent screenshots</h3>
+          <div id="dHistory" class="grid grid-cols-4 gap-2"></div>
+        </div>
       </div>
       <div>
         <div class="tabs scrollx flex gap-4 sm:gap-5 border-b border-slate-200 mb-2 overflow-x-auto">
           <button data-tab="act" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-indigo-600">Activity</button>
           <button data-tab="rep" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Today’s report</button>
           <button data-tab="apps" class="dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Apps</button>
+          <button data-tab="rec" class="dtab relative shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Recordings<span id="recDot" class="hidden"> ●</span></button>
           <button data-tab="ctl" class="owner-act dtab shrink-0 pb-2 text-sm font-semibold border-b-2 border-transparent text-slate-500">Controls</button>
         </div>
         <div id="dAct" class="thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto"></div>
@@ -149,6 +180,15 @@ body.ro .owner-act{display:none!important}</style>
         <div id="dApps" class="hidden thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto">
           <p class="text-xs text-slate-500 mb-2">Running applications (updates while <b>Live view</b> is on). “Stop” closes it now and keeps it blocked.</p>
           <div id="appsList"></div>
+        </div>
+        <!-- Recordings: videos of this screen, made with Record. Listed here to play,
+             download or delete. -->
+        <div id="dRecs" class="hidden thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto pr-1">
+          <div class="flex items-center gap-2 mb-2">
+            <button id="recNew" class="owner-act shrink-0 bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-1.5 font-medium">⏺ Record</button>
+            <p id="recHelp" class="text-xs text-slate-500"></p>
+          </div>
+          <div id="recList"></div>
         </div>
         <div id="dCtl" class="hidden thin text-sm max-h-[22rem] lg:max-h-[30rem] overflow-auto pr-1">
           <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 mb-4">
@@ -158,7 +198,6 @@ body.ro .owner-act{display:none!important}</style>
             <button id="remoteStop"     class="owner-act hidden bg-slate-700 hover:bg-slate-800 text-white rounded-lg px-3 py-2 font-medium">■ Stop Control</button>
             <button data-cmd="message"  class="cbtn bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 font-medium">Send notice</button>
             <button data-cmd="lock"     class="cbtn bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-3 py-2 font-medium">Lock</button>
-            <button data-cmd="logoff"   class="cbtn bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-2 font-medium">Log off</button>
             <button data-cmd="restart"  class="cbtn bg-orange-600 hover:bg-orange-700 text-white rounded-lg px-3 py-2 font-medium">Restart</button>
             <button data-cmd="shutdown" class="cbtn bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-2 font-medium col-span-2 sm:col-auto">Shut down</button>
           </div>
@@ -216,6 +255,27 @@ body.ro .owner-act{display:none!important}</style>
       <div id="addKeys" class="max-h-40 overflow-y-auto text-sm"></div>
     </div>
     <button id="addClose" class="w-full text-slate-500 hover:text-slate-800 text-sm mt-4">Close</button>
+  </div>
+</div>
+
+<!-- Record the screen: how long, and what happens to the recording -->
+<div id="recModal" class="hidden fixed inset-0 z-30 bg-black/50 p-4 grid place-items-center">
+  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-6">
+    <h2 class="font-bold text-lg mb-1">Record the screen</h2>
+    <p class="text-sm text-slate-500 mb-4">Makes a video of <b id="recWho"></b>’s screen for the time you choose: <span id="recRate">about one picture a second</span>. It goes on if you close this page. When it ends it is saved on the server and listed under <b>Recordings</b>, where you can play it, download it as a video file or delete it. Kept for <span id="recKeep">30</span> days.</p>
+    <div class="text-xs font-semibold text-slate-600 mb-2">How long</div>
+    <div id="recLens" class="flex flex-wrap gap-2 mb-4">
+      <button data-min="1" class="recLen rounded-lg px-3 py-1.5 text-sm font-medium">1 min</button>
+      <button data-min="2" class="recLen rounded-lg px-3 py-1.5 text-sm font-medium">2 min</button>
+      <button data-min="5" class="recLen rounded-lg px-3 py-1.5 text-sm font-medium">5 min</button>
+      <button data-min="10" class="recLen rounded-lg px-3 py-1.5 text-sm font-medium">10 min</button>
+      <button data-min="30" class="recLen rounded-lg px-3 py-1.5 text-sm font-medium">30 min</button>
+    </div>
+    <p id="recMsg" class="hidden text-sm text-red-600 mb-3"></p>
+    <div class="flex gap-2">
+      <button id="recGo" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg py-2 font-semibold">⏺ Start recording</button>
+      <button id="recCancel" class="px-4 text-slate-500 hover:text-slate-800 text-sm">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -352,6 +412,7 @@ function signedOut() {
   saved.wipe();
   stopTimers();
   stopPlay();
+  closeRecording(true);
   endControl('', false);
   stopLive(false);
   curId = null;
@@ -499,6 +560,7 @@ async function fetchDetail(id) {
     const r = await api('/api/admin/device?id=' + id);
     if (asked === changes) {
       (r.device.commands || []).forEach(c => { c.at = Date.now(); });   // the moment their 'age' was true
+      (r.device.recordings || []).forEach(x => { x.at = Date.now(); }); // ...and their 'secs_left'
       detailCache.set(id, { d: r.device, at: Date.now() });
       return r.device;
     }
@@ -543,12 +605,13 @@ let curPath = null, lastShotId = null;
 function openDetail(id) {
   id = String(id);
   stopPlay();
+  closeRecording(true);
   stopLive(true);
   endControl('');                        // control never follows the owner to another computer
   curId = id; userPicked = false; repPicked = null; polDirty = false;
   localCmds = []; cmdRows = []; frames = []; lastShotId = null;
-  recUntil = 0; recWas = false;
-  ctlSay(''); ctlUI(); paintRec();
+  recs = []; recWatching = null;
+  ctlSay(''); ctlUI(); paintRecs();
   $('#playSlider').max = 0; setText($('#playTs'), '');
   $('#detail').setAttribute('data-id', id);
   const big = $('#dShot');
@@ -602,6 +665,12 @@ function paintDetail(d) {
   if (d.procs) paintApps(d.procs);
   if (d.policy) paintPolicy(d.policy);
   if (d.commands) { cmdRows = d.commands; paintCommands(); }
+  if (d.recordings) {
+    recs = d.recordings;
+    recKeepDays = d.rec_keep_days || recKeepDays;
+    paintRecs();
+    if (recOpen()) recWatch(String(d.id));
+  }
 }
 
 // The row of recent screenshots: pictures already there stay, so nothing is fetched or redrawn twice.
@@ -738,6 +807,7 @@ $('#playBtn').addEventListener('click', async () => {
 
 function closePanel() {
   stopPlay();
+  closeRecording(true);
   stopLive(true);
   endControl('');
   curId = null;
@@ -829,6 +899,7 @@ function showTab(t) {
   $('#dAct').classList.toggle('hidden', t !== 'act');
   $('#dRep').classList.toggle('hidden', t !== 'rep');
   $('#dApps').classList.toggle('hidden', t !== 'apps');
+  $('#dRecs').classList.toggle('hidden', t !== 'rec');
   $('#dCtl').classList.toggle('hidden', t !== 'ctl');
   // Already painted. Only freshen it quietly if it is getting old.
   const have = detailCache.get(curId);
@@ -890,6 +961,7 @@ const liveDecoder = new TextDecoder();
 window.emStats = { firstFrameMs: null, frames: 0, mode: null };
 function startLive(id) {
   stopPlay();
+  closeRecording();                      // the picture is the computer's own again, then the live screen's
   stopLive(false);
   const L = { id: String(id), ctrl: new AbortController(), startedAt: Date.now(), until: Date.now() + 120000,
               count: 0, lastFrameAt: 0, lastByte: Date.now(), latest: null, meta: null, drawing: false, mode: 'stream' };
@@ -1069,14 +1141,15 @@ $('#dLive').addEventListener('click', () => sendCommand(curId, 'live', null));
 
 // ---- actions: the answer is on screen at once, the computer's result follows ----
 let cmdRows = [], localCmds = [], cmdWatch = null, cmdUntil = 0;
-const CONFIRM = { logoff:'Log this user off?', restart:'Restart this computer?', shutdown:'Shut this computer down?' };
+const CONFIRM = { restart:'Restart this computer?', shutdown:'Shut this computer down?' };
 function sendCommand(id, type, btn) {
   if (type === 'message') { openNotice(id); return; }   // the notice composer (text + voice + picture, 1 / some / all)
   if (type === 'live') {
     if (live && live.id === String(id)) { stopLive(true); refreshPanel(); } else startLive(id);
     return;
   }
-  const payload = type === 'record' ? (recUntil > Date.now() ? '0' : '5') : '';   // the same button stops a recording
+  if (type === 'record') { if (recOpen()) stopRecording(); else openRecModal(); return; }   // the same button stops a recording
+  const payload = '';
   if (CONFIRM[type] && !confirm(CONFIRM[type])) return;
   if (btn) { btn.classList.add('ring-2', 'ring-offset-2', 'ring-indigo-400'); setTimeout(() => btn.classList.remove('ring-2', 'ring-offset-2', 'ring-indigo-400'), 700); }
   const row = { id: 0, type, payload, status: 'sending', created_at: 'now' };
@@ -1086,6 +1159,7 @@ function sendCommand(id, type, btn) {
     .then(r => { row.id = r.command_id; row.status = 'pending'; paintCommands(); watchCommands(String(id)); })
     .catch(e => { row.status = 'failed'; row.result = e.message; paintCommands(); });
 }
+// ("Log off" is no longer an action; the name is kept for one still listed from before.)
 const CMD_NAME = { live:'Live view', record:'Record', remote_start:'Take control', remote_stop:'Stop control', notice:'Notice',
                    message:'Message', lock:'Lock', logoff:'Log off', restart:'Restart', shutdown:'Shut down' };
 function paintCommands() {
@@ -1105,39 +1179,268 @@ function paintCommands() {
       <span class="text-xs ${color}">${esc(c.status)}</span></div>`;
   }).join('') || '<p class="text-slate-400 py-2">No actions yet.</p>');
   ctlCheckCommand();
-  recCheck();
 }
-// ---- record: a frame every 4 seconds for five minutes, kept for Playback ----
-// Whether the open computer is recording is read from its newest "record" action: how
-// long it was asked for, and how old it is by the server's clock. So the button knows
-// also after the page was loaded again, and the same button stops the recording.
-let recUntil = 0, recWas = false, recN = 0;
-function recCheck() {
-  const r = localCmds.concat(cmdRows).find(c => c.type === 'record');
-  const mins = r ? Number(r.payload || 0) : 0;
-  // Still waiting after 15 s: the computer has not taken it (it is off), so it is not recording.
-  const notTaken = r && (r.status === 'pending' || r.status === 'sending') && r.age != null && r.age > 15;
-  if (!r || r.status === 'failed' || !(mins > 0) || notTaken) recUntil = 0;
-  else if (r.age == null) { if (recUntil < Date.now()) recUntil = Date.now() + mins * 60000; }     // pressed just now
-  else recUntil = r.age < mins * 60 ? (r.at || Date.now()) + (mins * 60 - r.age) * 1000 : 0;
-  paintRec();
+
+// ---- recordings: a video of the screen for some minutes, saved on the server ----
+// Record asks how long, and the computer then sends about one picture a second for that
+// time. The recording is the server's from the first moment: it goes on with this page
+// closed, and the list below is what the server says - what is recording now and how
+// much of it is left by the server's own clock, and every finished one to play,
+// download as a video file, or delete. The same button stops one that is running.
+let recs = [], recKeepDays = 30, recWatching = null, recMin = 5;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const clock = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+const fmtSize = (b) => b >= 1048576 ? (b / 1048576).toFixed(b >= 10485760 ? 0 : 1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+const recOpen = () => recs.find(r => r.status === 'waiting' || r.status === 'recording') || null;
+const recLeft = (r) => Math.max(0, Math.round(Number(r.secs_left || 0) - (Date.now() - (r.at || Date.now())) / 1000));
+// "2026-11-14 11:32:05" (+ so many ms) -> "14 Nov 11:32" (with seconds if asked)
+function recWhen(r, ms, secs) {
+  const m = /^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/.exec(r.started_at || r.created_at || '');
+  if (!m) return '';
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6] + Math.floor((ms || 0) / 1000));
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + (secs ? ':' + p(d.getSeconds()) : '');
 }
-function paintRec() {
-  const on = !!curId && recUntil > Date.now();
-  const left = on ? Math.round((recUntil - Date.now()) / 1000) : 0;
-  const clock = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
-  setText(document.querySelector('.cbtn[data-cmd="record"]'), on ? '■ Stop recording ' + clock : '⏺ Record');
-  const badge = $('#recBadge');
-  badge.classList.toggle('hidden', !on);
-  if (on) setText(badge, '● REC ' + clock);
-  return on;
+function paintRecs() {
+  const open = curId ? recOpen() : null;
+  const label = !open ? '⏺ Record' : open.status === 'waiting' ? '■ Stop (starting…)' : '■ Stop recording ' + clock(recLeft(open));
+  setText(document.querySelector('.cbtn[data-cmd="record"]'), label);
+  setText($('#recNew'), label);
+  $('#recDot').classList.toggle('hidden', !open);
+  const old = curId && !verAtLeast(agentVersionOf(curId), '1.4.0');
+  setText($('#recHelp'), 'A video of this screen, about one picture ' + (old ? 'every 4 seconds (this computer’s agent is older than 1.4.0; update it for one a second)' : 'a second')
+    + '. Saved on the server for ' + recKeepDays + ' days.');
+  const btn = 'text-xs rounded px-2 py-1';
+  setHtml($('#recList'), recs.map(r => {
+    const who = r.made_by ? ' · by ' + esc(r.made_by) : '';
+    if (r.status === 'waiting') return `<div class="py-2 border-b">
+        <div class="flex items-center gap-2"><b class="text-amber-600">Starting…</b>
+          <span class="flex-1 min-w-0 text-xs text-slate-500">waiting for the computer to answer</span>
+          <button data-rec-stop="1" class="owner-act shrink-0 ${btn} bg-slate-200 hover:bg-slate-300">Cancel</button></div></div>`;
+    if (r.status === 'recording') {
+      const left = recLeft(r), all = Number(r.minutes) * 60;
+      return `<div class="py-2 border-b">
+        <div class="flex items-center gap-2"><b class="text-red-600">● Recording</b>
+          <span class="flex-1 min-w-0 text-xs text-slate-500">${left > 0 ? clock(all - left) + ' of ' + clock(all) : 'finishing…'} · ${Number(r.frames)} pictures</span>
+          <button data-rec-stop="1" class="owner-act shrink-0 ${btn} bg-slate-800 hover:bg-slate-900 text-white">■ Stop</button></div></div>`;
+    }
+    if (r.status === 'failed') return `<div class="py-2 border-b">
+        <div class="flex items-center gap-2"><span class="font-semibold">${esc(recWhen(r))}</span>
+          <span class="flex-1 min-w-0 text-xs text-red-600">Not recorded</span>
+          <button data-rec-del="${r.id}" class="owner-act shrink-0 ${btn} bg-red-50 text-red-600 hover:bg-red-100">Delete</button></div>
+        <p class="text-xs text-slate-500">${esc(r.note || '')}${who}</p></div>`;
+    return `<div class="py-2 border-b">
+        <div class="flex items-center gap-2"><span class="font-semibold">${esc(recWhen(r))}</span>
+          <span class="flex-1 min-w-0 text-xs text-slate-500">${clock(Number(r.seconds))} · ${Number(r.frames)} pictures · ${fmtSize(Number(r.bytes))}</span></div>
+        ${r.note || who ? `<p class="text-xs text-slate-500">${esc(r.note || '')}${who}</p>` : ''}
+        <div class="flex items-center gap-1.5 mt-1">
+          <button data-rec-play="${r.id}" class="${btn} bg-slate-800 hover:bg-slate-900 text-white">▶ Play</button>
+          <a href="/api/admin/recording-video?id=${r.id}" download class="${btn} bg-slate-200 hover:bg-slate-300">⬇ Download</a>
+          <button data-rec-del="${r.id}" class="owner-act ${btn} bg-red-50 text-red-600 hover:bg-red-100 ml-auto">Delete</button></div></div>`;
+  }).join('') || '<p class="text-slate-400 py-3">No recordings yet.</p>');
 }
-function recTick() {                    // once a second
-  const on = paintRec();
-  // While it records, the new frames come into Playback by themselves; once more at the end.
-  if (curId && ((on && ++recN % 5 === 0) || (recWas && !on))) { loadFrames(curId, true); if (!live) refreshPanel(); }
-  recWas = on;
+async function loadRecs(id) {
+  try {
+    const d = await api('/api/admin/recordings?id=' + id);
+    if (curId !== id) return;
+    d.recordings.forEach(r => { r.at = Date.now(); });
+    recs = d.recordings;
+    recKeepDays = d.keep_days || recKeepDays;
+    const have = detailCache.get(id);
+    if (have) { have.d.recordings = recs; have.d.rec_keep_days = recKeepDays; }
+    paintRecs();
+  } catch (e) {}
 }
+// Follow a recording until it is finished and saved. Stops by itself.
+async function recWatch(id) {
+  if (recWatching === id) return;
+  recWatching = id;
+  while (recWatching === id && curId === id && recOpen()) {
+    await wait(2500);
+    if (recWatching !== id || curId !== id) break;
+    if (!document.hidden) await loadRecs(id);
+  }
+  if (recWatching === id) recWatching = null;
+}
+function recTick() {                    // once a second: the clock of a running recording
+  if (curId && recOpen()) paintRecs();
+}
+function recLenUI() { document.querySelectorAll('.recLen').forEach(b => b.classList.toggle('on', Number(b.getAttribute('data-min')) === recMin)); }
+function openRecModal() {
+  const me = byId.get(String(curId));
+  setText($('#recWho'), me ? nameOf(me) : $('#dName').textContent);
+  setText($('#recKeep'), String(recKeepDays));
+  setText($('#recRate'), verAtLeast(agentVersionOf(curId), '1.4.0') ? 'about one picture a second' : 'one picture every 4 seconds (this computer’s agent is older than 1.4.0)');
+  try { recMin = Number(localStorage.getItem('em.recmin')) || recMin; } catch (e) {}
+  recLenUI();
+  $('#recMsg').classList.add('hidden');
+  $('#recModal').classList.remove('hidden');
+}
+$('#recLens').addEventListener('click', (e) => {
+  const b = e.target.closest('.recLen');
+  if (b) { recMin = Number(b.getAttribute('data-min')); recLenUI(); }
+});
+$('#recCancel').addEventListener('click', () => $('#recModal').classList.add('hidden'));
+$('#recGo').addEventListener('click', async () => {
+  const id = curId, go = $('#recGo');
+  if (!id || go.disabled) return;
+  go.disabled = true; go.textContent = 'Starting…';
+  $('#recMsg').classList.add('hidden');
+  try {
+    await api('/api/admin/command', postJson({ device_id: Number(id), type: 'record', payload: String(recMin) }));
+    changes++;                          // a panel reply that left before this must not bring the old list back
+    try { localStorage.setItem('em.recmin', String(recMin)); } catch (e) {}
+    $('#recModal').classList.add('hidden');
+    if (curId === id) { showTab('rec'); await loadRecs(id); recWatch(id); watchCommands(id); }
+  } catch (e) {
+    $('#recMsg').textContent = e.message || 'Could not start the recording.';
+    $('#recMsg').classList.remove('hidden');
+  }
+  go.disabled = false; go.textContent = '⏺ Start recording';
+});
+async function stopRecording() {
+  const id = curId;
+  if (!id) return;
+  try { await api('/api/admin/command', postJson({ device_id: Number(id), type: 'record', payload: '0' })); }
+  catch (e) { alert(e.message || 'Could not stop the recording.'); }
+  changes++;
+  if (curId === id) { await loadRecs(id); watchCommands(id); }
+}
+$('#recNew').addEventListener('click', () => sendCommand(curId, 'record', null));
+$('#recList').addEventListener('click', async (e) => {
+  const play = e.target.closest('[data-rec-play]'), del = e.target.closest('[data-rec-del]');
+  if (e.target.closest('[data-rec-stop]')) { stopRecording(); return; }
+  if (play) { openRecording(Number(play.getAttribute('data-rec-play'))); return; }
+  if (!del) return;
+  const id = curId, recId = Number(del.getAttribute('data-rec-del'));
+  const r = recs.find(x => Number(x.id) === recId);
+  if (r && r.status === 'done' && !confirm('Delete this recording (' + recWhen(r) + ')?\n\nIts pictures are removed from the server. This cannot be undone.')) return;
+  del.disabled = true;
+  try {
+    await api('/api/admin/recording-remove', postJson({ id: recId }));
+    changes++;
+    if (rp.id === recId) closeRecording();
+  } catch (err) { alert(err.message || 'Could not delete the recording.'); }
+  if (curId === id) loadRecs(id);
+});
+
+// ---- playing one recording ----
+// Its pictures are shown at the pace they were taken - each is named by how far into the
+// recording it was taken - times the chosen speed. Where the screen stood still there
+// is no new picture and the last one simply stays, as it did on the screen.
+const rp = { id: null, rec: null, frames: [], dur: 0, pos: 0, speed: 1, playing: false, timer: null, tick: 0, stall: 0, shown: -1, want: -1, busy: false };
+const rpUrl = (f) => '/api/admin/rec-frame?id=' + rp.id + '&f=' + f + '&v=' + (rp.rec.stamp || 0);
+function rpIndex(ms) {                  // the last picture taken at or before this moment
+  let lo = 0, hi = rp.frames.length - 1, at = 0;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (rp.frames[mid].t <= ms) { at = mid; lo = mid + 1; } else hi = mid - 1; }
+  return at;
+}
+async function openRecording(recId) {
+  const id = curId;
+  let d;
+  try { d = await api('/api/admin/recording?id=' + recId); }
+  catch (e) { alert(e.message || 'Could not open the recording.'); if (curId === id) loadRecs(id); return; }
+  if (curId !== id) return;
+  if (!d.frames.length) { alert('This recording has no pictures.'); return; }
+  stopPlay();
+  stopLive(true);                       // the picture is the recording's now (this also ends control)
+  closeRecording(true);
+  rp.id = recId; rp.rec = d.recording;
+  rp.frames = d.frames.map(f => ({ t: parseInt(f.slice(0, 9), 10), f }));
+  rp.dur = Math.max(1000, Number(d.recording.seconds || 0) * 1000, rp.frames[rp.frames.length - 1].t);
+  rp.pos = 0; rp.shown = rp.want = -1; rp.stall = 0;
+  try { rp.speed = Number(localStorage.getItem('em.recspeed')) || 1; } catch (e) { rp.speed = 1; }
+  userPicked = true; curPath = null;
+  setText($('#rpTitle'), recWhen(rp.rec) + ' · ' + clock(rp.dur / 1000));
+  $('#rpSlider').max = Math.ceil(rp.dur / 100);
+  $('#rpSlider').value = 0;
+  $('#rpDown').href = '/api/admin/recording-video?id=' + recId;
+  rpSpeedUI();
+  $('#rpBox').classList.remove('hidden');
+  $('#playBox').classList.add('hidden');
+  const box = $('#dShot').getBoundingClientRect();
+  if (box.top < 0 || box.bottom > window.innerHeight) $('#dShot').scrollIntoView({ block: 'center' });   // one column (a phone): bring the picture into view
+  rpShow();
+  rpPlay();
+}
+function rpShow() {
+  if (!rp.id) return;
+  const i = rpIndex(rp.pos);
+  setText($('#rpTime'), clock(rp.pos / 1000) + ' / ' + clock(rp.dur / 1000));
+  const v = String(Math.round(rp.pos / 100)), sl = $('#rpSlider');
+  if (sl.value !== v) sl.value = v;
+  setText($('#dShotTs'), 'Recording: ' + recWhen(rp.rec, rp.pos, true));
+  if (i === rp.shown) return;
+  rp.want = i;
+  if (!rp.busy) rpPump();
+}
+async function rpPump() {               // one picture at a time; the newest one wanted wins
+  rp.busy = true;
+  while (rp.id && rp.want >= 0 && rp.want !== rp.shown) {
+    const id = rp.id, i = rp.want, url = rpUrl(rp.frames[i].f);
+    let ok = true;
+    try { await preload(url); } catch (e) { ok = false; }
+    if (rp.id !== id) break;
+    rp.shown = i;                       // (a picture that will not load is passed over)
+    if (!ok) continue;
+    bigToken++; bigEpoch++;
+    $('#dShot').src = url;
+    if ($('#liveFs').classList.contains('on')) $('#liveFsImg').src = url;
+    for (let k = 1; k <= Math.min(8, 2 + rp.speed); k++) { const f = rp.frames[i + k]; if (f) preload(rpUrl(f.f)).catch(() => {}); }
+  }
+  rp.busy = false;
+}
+function rpPlay() {
+  if (!rp.id) return;
+  if (rp.pos >= rp.dur) { rp.pos = 0; rpShow(); }     // at the end: from the start again
+  rp.playing = true; rp.tick = performance.now(); rp.stall = 0;
+  clearInterval(rp.timer);
+  rp.timer = setInterval(rpStep, 100);
+  setText($('#rpPlay'), '⏸ Pause');
+}
+function rpPause() {
+  rp.playing = false;
+  clearInterval(rp.timer); rp.timer = null;
+  setText($('#rpPlay'), '▶ Play');
+}
+function rpStep() {
+  const now = performance.now(), dt = now - rp.tick;
+  rp.tick = now;
+  // A picture still on its way: the clock waits for it (2 s at most), so a slow line
+  // plays slower instead of leaving pictures out.
+  if (rp.busy && rp.want !== rp.shown) { rp.stall += dt; if (rp.stall < 2000) return; } else rp.stall = 0;
+  rp.pos = Math.min(rp.dur, rp.pos + dt * rp.speed);
+  rpShow();
+  if (rp.pos >= rp.dur) rpPause();
+}
+function rpSpeedUI() { document.querySelectorAll('.rpSpeed').forEach(b => b.classList.toggle('on', Number(b.getAttribute('data-speed')) === rp.speed)); }
+// quiet: the panel is closing or moving on to another computer, so there is no picture
+// to put back. Otherwise the big picture goes back to this computer's newest screenshot,
+// so a picture of the recording is never left standing under another caption.
+function closeRecording(quiet) {
+  if (!rp.id) return;
+  rpPause();
+  rp.id = null; rp.rec = null; rp.frames = []; rp.shown = rp.want = -1;
+  $('#rpBox').classList.add('hidden');
+  $('#playBox').classList.remove('hidden');
+  userPicked = false; lastShotId = null;
+  if (quiet) return;
+  const have = detailCache.get(curId);
+  if (have) paintDetail(have.d);
+  refreshPanel();
+}
+$('#rpPlay').addEventListener('click', () => rp.playing ? rpPause() : rpPlay());
+$('#rpClose').addEventListener('click', () => closeRecording());
+$('#rpSlider').addEventListener('input', (e) => {
+  rp.pos = Math.min(rp.dur, Number(e.target.value) * 100);
+  rp.tick = performance.now(); rp.stall = 0;
+  rpShow();
+});
+document.querySelectorAll('.rpSpeed').forEach(b => b.addEventListener('click', () => {
+  rp.speed = Number(b.getAttribute('data-speed'));
+  try { localStorage.setItem('em.recspeed', String(rp.speed)); } catch (e) {}
+  rpSpeedUI();
+}));
 // Follow an action until the computer has answered. Stops by itself.
 async function watchCommands(id) {
   cmdUntil = Date.now() + 30000;
@@ -1233,7 +1536,7 @@ async function openLog() {
   $('#logModal').classList.remove('hidden');
   const box = $('#logList');
   setHtml(box, SKELETON);
-  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent', enroll_key: 'Install key', device_renamed: 'Computer renamed' };
+  const label = { admin_login: 'Signed in', admin_login_fail: 'Failed sign-in', command: 'Action sent', device_removed: 'Computer removed', cameras: 'Cameras link', ping_hold_off: 'Network note', enrolled: 'Computer added', policy: 'Restrictions', block_app: 'App blocked', notice: 'Notice sent', enroll_key: 'Install key', device_renamed: 'Computer renamed', recording: 'Recording' };
   try {
     const r = await api('/api/admin/events');
     if (!r.events.length) { setHtml(box, '<p class=\"text-slate-500 py-4 text-center\">Nothing yet.</p>'); return; }

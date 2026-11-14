@@ -94,7 +94,7 @@ function route(string $path, string $method, array $cfg): void
         // no 'expired') with the reason, so the owner can see it never ran.
         x("UPDATE commands SET status = 'failed', result = 'expired: computer was offline too long', done_at = NOW()
            WHERE device_id = ? AND status = 'pending'
-             AND ( (type IN ('logoff','restart','shutdown','live','record','remote_start','remote_stop')
+             AND ( (type IN ('restart','shutdown','live','record','remote_start','remote_stop')
                         AND created_at < NOW() - INTERVAL 5 MINUTE)
                    OR (type IN ('mouse_move','mouse_click','mouse_scroll','key') AND created_at < NOW() - INTERVAL 45 SECOND)
                    OR (type IN ('notice','message') AND created_at < NOW() - INTERVAL ? HOUR)
@@ -103,12 +103,14 @@ function route(string $path, string $method, array $cfg): void
         // An action stays on offer until the computer reports on it. The agent runs what it
         // gets and reports before its next ping, so 'sent' with no report means the reply
         // never reached it (it dropped off while its ping was waiting). Recent ones only, and
-        // never the three that end a session: a second Restart is worse than a lost one, and
+        // never the two that end a session: a second Restart is worse than a lost one, and
         // the owner can see it never said 'done'.
+        // "Log off" is no longer an action: one still waiting from before is never handed
+        // over (it runs out with the hour, above).
         $findCmds = fn () => q(
-            "SELECT id, type, payload FROM commands WHERE device_id = ? AND (status = 'pending'
+            "SELECT id, type, payload FROM commands WHERE device_id = ? AND type <> 'logoff' AND (status = 'pending'
                OR (status = 'sent'
-                   AND type NOT IN ('logoff', 'restart', 'shutdown', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key')
+                   AND type NOT IN ('restart', 'shutdown', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key')
                    AND created_at > NOW() - INTERVAL 180 SECOND))
              ORDER BY id", [$id]);
         $findPol  = fn () => q1('SELECT blocked_sites, blocked_apps FROM policies WHERE device_id = ?', [$id]);
@@ -169,7 +171,8 @@ function route(string $path, string $method, array $cfg): void
                         sig_put($id, 'live', (string) (time() + 125));
                     }
                 } elseif ($c['type'] === 'record') {
-                    sig_put($id, 'rec', (string) (time() + ($c['payload'] === '' ? 5 : (int) $c['payload']) * 60 + 5));
+                    // The recording's clock starts when the computer is handed the action.
+                    rec_handover($id, (int) $c['id'], $c['payload'] === '' ? 5 : (int) $c['payload']);
                 }
             }
         }
@@ -197,6 +200,17 @@ function route(string $path, string $method, array $cfg): void
         x("UPDATE commands SET status = ?, result = ?, done_at = NOW()
            WHERE id = ? AND device_id = ? AND status <> 'pending'",
             [$ok ? 'done' : 'failed', mb_substr((string) ($b['result'] ?? ''), 0, 255), $id, $dev['id']]);
+        if (!$ok) {
+            // If that was a "record" the computer could not carry out, its recording says so.
+            try {
+                $rec = q1("SELECT id FROM recordings WHERE command_id = ? AND device_id = ? AND status IN ('waiting','recording')",
+                    [$id, $dev['id']]);
+                if ($rec) {
+                    rec_fail((int) $rec['id'], 'The computer could not record: ' . (string) ($b['result'] ?? ''));
+                    sig_put((int) $dev['id'], 'rec', '0');
+                }
+            } catch (PDOException $e) { /* no recordings on this database yet */ }
+        }
         json_out(['ok' => true]);
     }
 
@@ -256,6 +270,29 @@ function route(string $path, string $method, array $cfg): void
             sig_put(0, 'guard', (string) time());
             disk_guard(400 * 1024 * 1024, 4);
         }
+        // A picture taken for a recording (the agent marks those, from 1.4.0 on) belongs
+        // to that recording and nowhere else: its own folder, no screenshot row, no
+        // part in the live view.
+        $rec = rec_active($id);
+        if (isset($_POST['rec'])) {
+            // Stopped on the dashboard, its time is up, or the picture is a late one of an
+            // earlier recording: say so, and the computer stops sending them at once.
+            if (!$rec || time() > $rec['until'] + REC_GRACE
+                || (isset($_POST['rec_cmd']) && (int) $_POST['rec_cmd'] !== $rec['cmd'])) {
+                json_out(['ok' => true, 'rec' => 'over']);
+            }
+            $whole = $rec['minutes'] * 60000;
+            $ms    = max(0, min($whole, (int) $_POST['rec']));
+            if (!rec_store($rec['id'], $ms, (int) $imgInfo[0], (int) $imgInfo[1], $_FILES['shot']['tmp_name'], true)) {
+                fail('Could not store image.', 500);
+            }
+            x('UPDATE devices SET last_seen = NOW() WHERE id = ?', [$id]);
+            if ($ms >= $whole) {
+                rec_finish($rec['id']);                  // that was its closing picture
+                json_out(['ok' => true, 'rec' => 'over']);
+            }
+            json_out(['ok' => true]);
+        }
         $ts   = isset($_POST['ts']) ? (int) $_POST['ts'] : time();
         $when = date('Y-m-d H:i:s', $ts);
         // A frame sent for the owner's live view is always shown, but only one in every
@@ -265,15 +302,22 @@ function route(string $path, string $method, array $cfg): void
         // existed sends none, so a live view that is on right now counts as well.
         $isLive    = !empty($_POST['live']) || (int) sig_get($id, 'live') > time();
         $keepEvery = (int) $cfg['live_keep_seconds'];
-        if ($keepEvery > 4 && (int) sig_get($id, 'rec') > time()) {
-            $keepEvery = 4;                                        // a recording keeps a frame every 4 seconds
-        }
         $kept      = explode(' ', sig_get($id, 'livekept'));       // "<time> <screenshot id>"
         $passing   = $isLive && $keepEvery > 0 && (time() - (int) $kept[0]) < $keepEvery;
         $name = ($passing ? 't_' : '') . date('Ymd_His', $ts) . '_' . substr(token(3), 0, 6) . '.jpg';
         $full = $dir . '/' . $name;
         if (!move_uploaded_file($_FILES['shot']['tmp_name'], $full)) {
             fail('Could not store image.', 500);
+        }
+        // An agent older than 1.4.0 does not mark a recording's pictures: while it
+        // records it simply sends screenshots more often (or its live frames). Take a
+        // copy of those, one a second at most, as the recording's pictures.
+        if ($rec && time() <= $rec['until'] && !rec_agent_marks((string) $dev['agent_version'])) {
+            $nowMs = round(microtime(true) * 1000);
+            if ($nowMs - (float) sig_get($id, 'reclast') >= 900) {
+                sig_put($id, 'reclast', sprintf('%.0f', $nowMs));
+                rec_store($rec['id'], (int) max(0, $nowMs - $rec['start']), (int) $imgInfo[0], (int) $imgInfo[1], $full, false);
+            }
         }
         if ($passing) {
             live_frame_remember($id, $dir, $name);
@@ -425,6 +469,8 @@ function route(string $path, string $method, array $cfg): void
         $dev['procs']    = procs_data($id);
         $dev['policy']   = policy_data($id);
         $dev['commands'] = commands_data($id);
+        $dev['recordings']    = recordings_data($id);
+        $dev['rec_keep_days'] = (int) $cfg['recording_days'];
         json_out(['ok' => true, 'device' => $dev]);
     }
 
@@ -615,20 +661,52 @@ function route(string $path, string $method, array $cfg): void
         // any other: listed and written to the log. The mouse and keyboard events
         // themselves ride their own fast channel (/api/admin/input); the four old
         // per-event types are still accepted from an older page, and never logged.
-        $allowed = ['message', 'lock', 'logoff', 'restart', 'shutdown', 'live', 'record',
+        $allowed = ['message', 'lock', 'restart', 'shutdown', 'live', 'record',
                     'remote_start', 'remote_stop', 'mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
         $input   = ['mouse_move', 'mouse_click', 'mouse_scroll', 'key'];
         if (!in_array($type, $allowed, true)) {
             fail('Unknown action.', 400);
         }
         $payload = mb_substr(trim((string) ($b['payload'] ?? '')), 0, 1000);
-        // Live / record carry a count of seconds. A non-number used to reach the agent
-        // and stall its loop for minutes, so it is refused here.
+        // Live carries a count of seconds, record a count of minutes (0 = stop). A
+        // non-number used to reach the agent and stall its loop for minutes, so it is
+        // refused here.
         if (($type === 'live' || $type === 'record') && !preg_match('/^\d{1,6}$/', $payload)) {
-            fail('That action needs a number of seconds.', 400);
+            fail('That action needs a number.', 400);
         }
-        if (!q1('SELECT id FROM devices WHERE id = ?', [$id])) {
+        $target = q1('SELECT id, (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(last_seen)) AS ago FROM devices WHERE id = ?', [$id]);
+        if (!$target) {
             fail('Not found.', 404);
+        }
+        // Record: a new recording is made here, so it has a place on the dashboard from
+        // the first moment; "0" ends the one that is running, at once.
+        $recId = 0;
+        if ($type === 'record' && (int) $payload > 0) {
+            if ((int) $payload > REC_MAX_MINUTES) {
+                fail('A recording can be ' . REC_MAX_MINUTES . ' minutes at most.', 400);
+            }
+            // Only a computer that is on can record. One that is off would leave the
+            // owner waiting for a recording that never comes.
+            if ($target['ago'] === null || (int) $target['ago'] >= 180) {
+                fail('This computer is off, so it cannot record now. Try again when it is on.', 409);
+            }
+            $free = @disk_free_space($cfg['data_dir']);
+            if ($free !== false && $free < 200 * 1024 * 1024) {
+                fail('The server is almost out of disk space, so a recording cannot be saved. Delete old recordings first.', 507);
+            }
+            try {
+                rec_settle($id);
+                if (q1("SELECT id FROM recordings WHERE device_id = ? AND status IN ('waiting','recording')", [$id])) {
+                    fail('This computer is already recording. Stop that recording first.', 409);
+                }
+                $recId = x('INSERT INTO recordings (device_id, minutes, created_by) VALUES (?,?,?)', [$id, (int) $payload, $a['id']]);
+            } catch (PDOException $e) {
+                fail('The database is not ready for recordings yet. Run "php tool.php migrate" on the server.', 500);
+            }
+        } elseif ($type === 'record') {
+            try {
+                rec_stop($id);
+            } catch (PDOException $e) { /* no recordings on this database yet */ }
         }
         // While the owner keeps watching, the page asks for more live time every minute
         // or so. That is the same live view, not a new action: offer the same row to
@@ -658,11 +736,85 @@ function route(string $path, string $method, array $cfg): void
         }
         $cid = x('INSERT INTO commands (device_id, type, payload, created_by) VALUES (?,?,?,?)',
             [$id, $type, $payload, $a['id']]);
+        if ($recId) {
+            x('UPDATE recordings SET command_id = ? WHERE id = ?', [$cid, $recId]);
+        }
         if (!in_array($type, $input, true)) {
             log_event($id, 'command', trim($type . ' ' . $payload) . ' · by ' . ($a['name'] ?: $a['username']));
         }
         sig_wake($id);
-        json_out(['ok' => true, 'command_id' => $cid]);
+        json_out(['ok' => true, 'command_id' => $cid] + ($recId ? ['recording_id' => $recId] : []));
+    }
+
+    // ---- recordings: a computer's saved screen videos (see "Recordings" in http.php) ----
+    if ($path === '/api/admin/recordings' && $method === 'GET') {
+        require_admin();
+        json_out(['ok' => true, 'recordings' => recordings_data((int) ($_GET['id'] ?? 0)),
+                  'keep_days' => (int) $cfg['recording_days']]);
+    }
+
+    // One recording with the names of its pictures, for the player. A name starts
+    // with how far into the recording the picture was taken, in milliseconds.
+    if ($path === '/api/admin/recording' && $method === 'GET') {
+        require_admin();
+        $r = rec_row((int) ($_GET['id'] ?? 0));
+        if (!$r) {
+            fail('Not found.', 404);
+        }
+        json_out(['ok' => true, 'recording' => $r,
+                  'frames' => array_map(fn ($f) => $f[3], rec_frames((int) $r['id']))]);
+    }
+
+    // One picture of a recording, admin only.
+    if ($path === '/api/admin/rec-frame' && $method === 'GET') {
+        require_admin();
+        $f = (string) ($_GET['f'] ?? '');
+        if (!preg_match('/^\d{9}_\d{1,5}x\d{1,5}\.jpg$/', $f)) {
+            fail('Bad name.', 400);
+        }
+        $full = rec_dir((int) ($_GET['id'] ?? 0)) . '/' . $f;
+        if (!is_file($full)) {
+            fail('Not found.', 404);
+        }
+        header('Content-Type: image/jpeg');
+        header('Cache-Control: private, max-age=2592000, immutable');
+        header('Content-Length: ' . filesize($full));
+        readfile($full);
+        exit;
+    }
+
+    // A recording as one video file to keep (Motion-JPEG AVI: Windows plays it as it is).
+    if ($path === '/api/admin/recording-video' && $method === 'GET') {
+        $a = require_admin();
+        $r = rec_row((int) ($_GET['id'] ?? 0));
+        if (!$r) {
+            fail('Not found.', 404);
+        }
+        $plan = rec_video_plan((int) $r['id']);
+        if (!$plan) {
+            fail('This recording has no pictures.', 404);
+        }
+        $dev  = q1('SELECT employee_name, hostname FROM devices WHERE id = ?', [(int) $r['device_id']]);
+        $who  = trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', ($dev['employee_name'] ?? '') ?: ($dev['hostname'] ?? '')), '-');
+        $when = date('Ymd-Hi', strtotime((string) ($r['started_at'] ?: $r['created_at'])) ?: time());
+        log_event((int) $r['device_id'], 'recording', 'downloaded #' . $r['id'] . ' · by ' . ($a['name'] ?: $a['username']));
+        rec_video_send($plan, 'recording-' . ($who !== '' ? $who : 'pc' . $r['device_id']) . '-' . $when . '.avi');
+    }
+
+    if ($path === '/api/admin/recording-remove' && $method === 'POST') {
+        $a = require_owner();
+        $b = body();
+        $r = rec_row((int) ($b['id'] ?? 0));
+        if (!$r) {
+            fail('Not found.', 404);
+        }
+        if ($r['status'] === 'waiting' || $r['status'] === 'recording') {
+            rec_stop((int) $r['device_id']);             // still running: it ends here
+        }
+        rec_delete((int) $r['id']);
+        log_event((int) $r['device_id'], 'recording', 'deleted #' . $r['id'] . ' (' . ($r['started_at'] ?: $r['created_at'])
+            . ') · by ' . ($a['name'] ?: $a['username']));
+        json_out(['ok' => true]);
     }
 
     // Remote control: the owner's mouse/keyboard events on their own fast queue, kept out

@@ -46,6 +46,9 @@ return [
     // seconds is kept as history, so an hour of watching cannot fill the disk.
     // 0 keeps every live frame.
     'live_keep_seconds' => (int) $get('EM_LIVE_KEEP_SECONDS', 10),
+    // A recording (the Record button) is kept this many days, then deleted with its
+    // pictures. The owner can download one as a video file to keep it longer.
+    'recording_days' => (int) ($get('EM_RECORDING_DAYS', 30) ?: 30),
     // A notice sent to a computer that is switched off waits this many hours for it.
     'notice_hours' => (int) ($get('EM_NOTICE_HOURS', 72) ?: 72),
     // How long a computer's ping may wait for a new action, in seconds, so the

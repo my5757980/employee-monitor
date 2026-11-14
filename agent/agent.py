@@ -6,6 +6,8 @@ What it does, openly (no hidden/stealth operation):
     computer is monitored for work, and remembers that the notice was shown.
   - Every minute it records which application/window is in front and whether the
     computer is idle, and takes one screenshot, and sends them to the server.
+  - When the owner watches live or asks for a recording, it sends pictures of the
+    screen more often for that time (a recording: about one a second).
   - When the owner takes control of the mouse and keyboard, a red bar on the
     screen says so for as long as it lasts. No bar, no control.
   - It never records passwords or key-by-key text, and it only runs on the
@@ -74,7 +76,7 @@ if not LIGHT:
     except Exception:
         HAS_REMOTE = False
 
-AGENT_VERSION = "1.3.0"
+AGENT_VERSION = "1.4.0"
 APP = "EmployeeMonitor"
 TASK_NAME = "EmployeeMonitorAgent"
 IS_WIN = sys.platform.startswith("win")
@@ -1052,6 +1054,16 @@ class _Screen:
         img.save(buf, format="JPEG", quality=quality)
         return buf.getvalue(), img.size
 
+    @staticmethod
+    def jpeg_at(raw, size, quality):
+        """The same at exactly this size (every picture of a recording has one size)."""
+        img = _picture(raw)
+        if img.size != tuple(size):
+            img = img.resize(tuple(size), Image.BILINEAR)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
+
     def close(self):
         try:
             self.sct.close()
@@ -1136,6 +1148,125 @@ def stop_frames():
         _live["stop"].set()
 
 
+# ----- a recording, on a thread of its own -----
+# The owner asked for a video of this screen for some minutes. A picture is taken on each
+# second of the recording's own clock, and sent if the screen has changed since the last
+# one sent (a screen that stands still sends one every ten seconds: "still recording").
+# Each picture says how far into the recording it was taken, so the server plays them
+# back at the pace they were taken - also when the line was slow and they arrived late.
+#   - Every picture of one recording has the same size, because a video has one size. A
+#     slow line gets lighter pictures of that size, not smaller ones.
+#   - It ends with a closing picture when its time is up, or at once when the server
+#     says the recording is over (the owner pressed Stop).
+#   - It runs beside everything else: the minute's sample and screenshot go on as usual,
+#     and the live view, if the owner is watching too, has its own frames.
+REC_WIDTH = 1600                 # a wider screen is scaled down to this
+REC_QUALITY = (60, 48, 36)       # JPEG quality: sharpest first
+REC_GAP = 1.0                    # seconds between pictures
+REC_STILL_SECONDS = 10.0
+REC_MAX_MINUTES = 60
+_rec = {"thread": None, "stop": None, "cmd": None}     # cmd: the action the running recording belongs to
+
+
+def _rec_size(screen_size):
+    """The size of a recording's pictures: the screen's own, or scaled to REC_WIDTH when it
+    is wider. Both sides even, which some video players insist on."""
+    w, h = screen_size
+    if w > REC_WIDTH:
+        w, h = REC_WIDTH, int(h * REC_WIDTH / w)
+    return max(2, w - w % 2), max(2, h - h % 2)
+
+
+def _record_loop(srv, stop_event, seconds, cmd_id):
+    screen = None
+    size = None
+    step = slow = quick = 0              # which of REC_QUALITY is in use
+    last_mark, last_sent = None, None
+    count = 0
+    began = time.monotonic()
+    try:
+        link = Server(srv.base, srv.token)                       # its own connection
+        while not stop_event.is_set():
+            at = time.monotonic() - began
+            closing = at >= seconds                              # the last picture: where the recording ends
+            try:
+                if screen is None:
+                    screen = _Screen()
+                raw = screen.grab()
+                mark = screen.fingerprint(raw)
+                if closing or last_sent is None or mark != last_mark or at - last_sent >= REC_STILL_SECONDS:
+                    if size is None:
+                        size = _rec_size(raw.size)
+                    data = screen.jpeg_at(raw, size, REC_QUALITY[step])
+                    sent = time.monotonic()
+                    reply = link.screenshot(data, size, time.time(), rec=int(min(at, seconds) * 1000), rec_cmd=cmd_id)
+                    took = time.monotonic() - sent
+                    last_mark, last_sent = mark, at
+                    count += 1
+                    if reply.get("rec") == "over":
+                        break                                    # stopped on the dashboard, or complete
+                    # A picture that takes most of a second to send is too heavy for this line:
+                    # after two of those, lighter ones. After fifteen quick ones, sharper again.
+                    if took > 0.8:
+                        slow, quick = slow + 1, 0
+                    elif took < 0.3:
+                        slow, quick = 0, quick + 1
+                    else:
+                        slow = quick = 0
+                    if slow >= 2 and step < len(REC_QUALITY) - 1:
+                        step, slow = step + 1, 0
+                    elif quick >= 15 and step > 0:
+                        step, quick = step - 1, 0
+            except requests.HTTPError as e:
+                code = e.response.status_code if e.response is not None else 0
+                log("recording:", str(e)[:100])
+                if code in (401, 403):
+                    break                                        # this computer is no longer on the dashboard
+            except requests.RequestException as e:
+                log("recording:", str(e)[:100])
+            except Exception as e:
+                log("recording error:", str(e)[:120])
+                if screen is not None:
+                    screen.close()
+                    screen = None
+            if closing:
+                break
+            # Until the next tick of the recording's own clock - or its end, if that is sooner.
+            at = time.monotonic() - began
+            pause = REC_GAP - (at % REC_GAP)
+            if pause < REC_GAP / 4:
+                pause += REC_GAP                     # woke a moment early: that was this tick's picture
+            stop_event.wait(max(0.02, min(pause, seconds - at)))
+    except Exception as e:
+        log("recording stopped by an error:", str(e)[:160])
+    finally:
+        if screen is not None:
+            screen.close()
+        log("recording: ended after %d s, %d pictures sent." % (time.monotonic() - began, count))
+
+
+def start_record(srv, seconds, cmd_id=None):
+    stop_record()                                    # one recording at a time
+    t = _rec["thread"]
+    if t and t.is_alive():
+        t.join(1.5)                                  # let the earlier one send its last picture first
+    ev = threading.Event()
+    _rec["stop"], _rec["cmd"] = ev, cmd_id
+    _rec["thread"] = threading.Thread(target=_record_loop, args=(srv, ev, seconds, cmd_id), daemon=True, name="em-record")
+    _rec["thread"].start()
+    log("recording: started, for %d s." % seconds)
+
+
+def stop_record():
+    if _rec["stop"] is not None:
+        _rec["stop"].set()
+
+
+def recording_now():
+    t = _rec["thread"]
+    return bool(t and t.is_alive() and not _rec["stop"].is_set())
+
+
 # ----- talking to the server -----
 class Server:
     def __init__(self, base, token=None):
@@ -1193,12 +1324,19 @@ class Server:
         r.raise_for_status()
         return r.json()
 
-    def screenshot(self, data, size, ts, live=False):
+    def screenshot(self, data, size, ts, live=False, rec=None, rec_cmd=None):
         """live: a frame for the owner's live view. The server shows every one of those
-        but keeps only one every few seconds as history."""
+        but keeps only one every few seconds as history.
+        rec: a picture of a recording, taken this many milliseconds into it (rec_cmd: the
+        action that started that recording). The server keeps it with the recording, and
+        answers {"rec": "over"} once the recording has ended."""
         fields = {"ts": int(ts), "w": size[0], "h": size[1]}
         if live:
             fields["live"] = 1
+        if rec is not None:
+            fields["rec"] = int(rec)
+            if rec_cmd:
+                fields["rec_cmd"] = int(rec_cmd)
         r = self.s.post(self.base + "/api/agent/screenshot", timeout=60,
                         headers=self._headers(),
                         files={"shot": ("s.jpg", data, "image/jpeg")}, data=fields)
@@ -1256,13 +1394,11 @@ def run_command(cmd, srv=None):
                 ctypes.windll.user32.LockWorkStation()
                 return True, "locked"
             return False, "windows only"
-        if t in ("logoff", "restart", "shutdown"):
+        if t in ("restart", "shutdown"):
             if not IS_WIN:
                 return False, "windows only"
-            flag = {"logoff": "/l", "restart": "/r", "shutdown": "/s"}[t]
-            args = ["shutdown", flag]
-            if t != "logoff":
-                args += ["/t", "15", "/c", (payload or "Your administrator scheduled this.")[:120]]
+            args = ["shutdown", {"restart": "/r", "shutdown": "/s"}[t],
+                    "/t", "15", "/c", (payload or "Your administrator scheduled this.")[:120]]
             r = subprocess.run(args, capture_output=True, text=True, creationflags=NO_WINDOW)
             if r.returncode != 0:
                 # Don't report success when Windows refused it (e.g. not allowed, or one
@@ -1272,7 +1408,8 @@ def run_command(cmd, srv=None):
         if t == "live":
             return True, "live"
         if t == "record":
-            return True, "recording"
+            # payload: minutes, "0" = stop. The main loop starts and stops the recorder.
+            return True, ("recording" if _whole(payload, 5) > 0 else "recording stopped")
 
         # ========== REMOTE CONTROL (mouse + keyboard) ==========
         # The answer is only "started" when it can really happen: the part that moves the
@@ -1822,13 +1959,22 @@ def selftest(out):
         t0 = time.perf_counter()
         data, size = screen.jpeg(raw, 1024, 42)
         made = time.perf_counter() - t0
-        screen.close()
         r["live_frame"] = "%dx%d, %d KB; a look at the screen takes %d ms, making a frame %d ms" % (
             size[0], size[1], len(data) // 1024, look * 1000, made * 1000)
+        try:                               # a recording's picture: one size, whatever the screen
+            t0 = time.perf_counter()
+            size = _rec_size(raw.size)
+            data = screen.jpeg_at(raw, size, REC_QUALITY[0])
+            r["record_frame"] = "%dx%d, %d KB, made in %d ms" % (
+                size[0], size[1], len(data) // 1024, (time.perf_counter() - t0) * 1000)
+        except Exception as e:
+            r["record_frame"] = "FAILED: " + str(e)[:100]
+        screen.close()
     except Exception as e:
         r["live_frame"] = "FAILED: " + str(e)[:100]
     r["ok"] = bool(r["remote_control"] and r["psutil"] and r["windows"] and r["pictures_in_messages"]
-                   and not str(r["screenshot"]).startswith("FAILED") and not str(r["live_frame"]).startswith("FAILED"))
+                   and not str(r["screenshot"]).startswith("FAILED") and not str(r["live_frame"]).startswith("FAILED")
+                   and not str(r.get("record_frame", "FAILED")).startswith("FAILED"))
     text = json.dumps(r, indent=2)
     if out and out != "-":
         with open(out, "w", encoding="utf-8") as f:
@@ -1902,7 +2048,6 @@ def run_agent(args):
     idle_limit   = _whole(cfg.get("idle_seconds"), 180)
     srv.token    = cfg["device_token"]
     next_sample  = 0.0
-    record_until = 0.0
     _live["until"] = 0.0     # until when the owner is watching live (shared with the frame thread)
     last_procs   = 0.0
     last_ping    = 0.0
@@ -1927,14 +2072,13 @@ def run_agent(args):
                 remote_requested = False
                 REMOTE_ACTIVE = apply_control(False, srv)
             stop_frames()
-            record_until = 0.0
+            stop_record()
             if args.once:
                 break
             time.sleep(5)
             continue
         try:
-            live      = now < _live["until"]
-            recording = now < record_until
+            live = now < _live["until"]
             # Pick up commands/policy on a ping: every 2 s, and about once a second while
             # the owner watches live (the frames themselves go out on their own thread).
             if (not live) or (now - last_ping >= 1.0):
@@ -1955,7 +2099,14 @@ def run_agent(args):
                         # "live" action has not arrived yet (the two are sent together).
                         _live["until"] = max(_live["until"], now + 120)
                     elif ok and kind == "record":
-                        record_until = now + _whole(cmd.get("payload"), 5) * 60
+                        # A recording takes its pictures on its own thread (see _record_loop).
+                        # The same action handed over a second time (its first answer was
+                        # lost on the way) must not start the recording again from zero.
+                        minutes = min(REC_MAX_MINUTES, _whole(cmd.get("payload"), 5))
+                        if minutes <= 0:
+                            stop_record()
+                        elif not (recording_now() and _rec["cmd"] == cmd.get("id")):
+                            start_record(srv, minutes * 60, cmd.get("id"))
                     srv.command_result(cmd["id"], ok, result)
 
                 # Control ends with the live view: the owner must be able to see what they
@@ -1972,11 +2123,10 @@ def run_agent(args):
                 pol = info.get("policy", {})
                 enforce_blocked_apps(pol.get("blocked_apps", []))
                 enforce_blocked_sites(pol.get("blocked_sites", []))
-                live      = now < _live["until"]
-                recording = now < record_until
+                live = now < _live["until"]
 
             due = now >= next_sample
-            if due or live or recording:
+            if due or live:
                 app, title = active_window()
                 idle = idle_seconds() > idle_limit
                 if due:
@@ -1991,13 +2141,13 @@ def run_agent(args):
                     if now - last_procs > 4:          # the running-apps list, while watching
                         srv.procs(running_apps())
                         last_procs = now
-                elif recording or due:
+                elif due:
                     data, size, sig = take_screenshot(signature=True)
                     # Somebody at the computer: a screenshot with every sample. Nobody at
                     # the keyboard or mouse: a still screen is not sent again and again,
                     # but one that keeps changing (a video, a game) still is, every five
                     # minutes - "no input" is not the same as "nothing on the screen".
-                    if recording or not idle or (screen_changed(sig, last_sig) and now - last_shot >= 300):
+                    if not idle or (screen_changed(sig, last_sig) and now - last_shot >= 300):
                         srv.screenshot(data, size, now)
                         last_sig, last_shot = sig, now
         except requests.HTTPError as e:
@@ -2027,6 +2177,7 @@ def run_agent(args):
                         remote_requested = False
                         REMOTE_ACTIVE = apply_control(False, srv)
                         stop_frames()
+                        stop_record()
                         removed = True
                     else:
                         log("re-enroll failed:", str(e2)[:120])
@@ -2041,6 +2192,7 @@ def run_agent(args):
                 remote_requested = False
                 REMOTE_ACTIVE = apply_control(False, srv)
                 stop_frames()
+                stop_record()
                 removed = True
             else:
                 net_fail += 1
@@ -2053,10 +2205,10 @@ def run_agent(args):
 
         if args.once:
             break
-        # Look for actions often while the admin watches, take a frame every 4 s while
-        # recording, otherwise come round just often enough to pick up actions (2 s). When
-        # the server can't be reached, back off so a computer left off all night barely stirs.
-        pause = 0.25 if now < _live["until"] else (4 if now < record_until else 2)
+        # Look for actions often while the admin watches, otherwise come round just often
+        # enough to pick up actions (2 s). When the server can't be reached, back off so a
+        # computer left off all night barely stirs.
+        pause = 0.25 if now < _live["until"] else 2
         if net_fail > 3:
             pause = min(60, 2 ** min(net_fail, 6))
         time.sleep(pause)

@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS screenshots (
 CREATE TABLE IF NOT EXISTS commands (
   id         BIGINT AUTO_INCREMENT PRIMARY KEY,
   device_id  INT NOT NULL,
-  type       VARCHAR(32)  NOT NULL,            -- notice | lock | logoff | restart | shutdown | live | record | remote_start | remote_stop
+  type       VARCHAR(32)  NOT NULL,            -- notice | lock | restart | shutdown | live | record | remote_start | remote_stop
   payload    VARCHAR(1000) NOT NULL DEFAULT '',
   status     ENUM('pending','sent','done','failed') NOT NULL DEFAULT 'pending',
   result     VARCHAR(255) NOT NULL DEFAULT '',
@@ -94,6 +94,28 @@ CREATE TABLE IF NOT EXISTS commands (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   done_at    TIMESTAMP NULL,
   KEY (device_id, status)
+);
+
+-- A recording: a video of one computer's screen for a few minutes, started with the
+-- Record button. Its pictures are files under data_dir/recs/<id>/, each named by how
+-- far into the recording it was taken; this row is the recording itself. The
+-- dashboard lists them per computer: play, download as a video file, delete.
+CREATE TABLE IF NOT EXISTS recordings (
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  device_id  INT NOT NULL,
+  command_id BIGINT NULL,                         -- the "record" action that started it
+  minutes    INT NOT NULL,                        -- the length that was asked for
+  status     ENUM('waiting','recording','done','failed') NOT NULL DEFAULT 'waiting',
+  note       VARCHAR(190) NOT NULL DEFAULT '',    -- why nothing was recorded, or that it was stopped early
+  started_at TIMESTAMP NULL,                      -- when the computer took the action
+  ends_at    TIMESTAMP NULL,                      -- when it is due to end
+  ended_at   TIMESTAMP NULL,
+  seconds    INT NOT NULL DEFAULT 0,              -- how long the finished recording is
+  frames     INT NOT NULL DEFAULT 0,
+  bytes      BIGINT NOT NULL DEFAULT 0,
+  created_by INT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY dev_latest (device_id, id)
 );
 
 -- A notice the owner sends to one, several, or all computers: a short message

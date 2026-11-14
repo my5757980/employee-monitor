@@ -24,7 +24,7 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 ## 3. Tools & restrictions
 | | |
 |---|---|
-| Turn off / restart remote computers | ✅ shutdown / restart / log off |
+| Turn off / restart remote computers | ✅ shutdown / restart |
 | Lock computer | ✅ |
 | Send a message / question | ✅ notice: text, picture and voice, to one / several / all; a computer that is off gets it when next on |
 | Open a web page on the remote computer | ➖ (left for now — “run something on the PC” is sensitive) |
@@ -40,9 +40,9 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 ## 5. Desktop recorder
 | | |
 |---|---|
-| Record screens (JPG) | ✅ record action + stored frames |
-| Play recordings | ✅ playback scrubber |
-| Record to MPEG4 video | ➖ (we store JPG frames; MP4 later) |
+| Record screens (JPG) | ✅ Record: about one picture a second for 1–30 minutes, saved as a recording |
+| Play recordings | ✅ Recordings tab: play at 1×–8×, jump to any moment |
+| Record to MPEG4 video | ◑ download as one video file (Motion‑JPEG AVI); MP4 later |
 | Scheduled recording | ◑ record for N minutes on demand |
 | Store on a hidden share | ➖ (we store on the server) |
 

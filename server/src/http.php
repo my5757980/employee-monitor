@@ -668,10 +668,10 @@ function shot_unlink(string $full): void
     @unlink($full . '.960.jpg');     // an old size, in case any are left
 }
 
-/** Never let the screenshots disk fill up, whatever the retention setting. While
- * free space is under $minFree bytes, delete the oldest screenshots (across all
- * computers, in the order the server received them) in batches. Returns how many
- * were removed. */
+/** Never let the pictures disk fill up, whatever the retention settings. While free
+ * space is under $minFree bytes, delete the oldest pictures - screenshots (across all
+ * computers, in the order the server received them, in batches) and finished
+ * recordings, whichever is older. Returns how many pictures were removed. */
 function disk_guard(int $minFree, int $maxBatches = 400): int
 {
     $dir   = em_config()['data_dir'];
@@ -684,6 +684,23 @@ function disk_guard(int $minFree, int $maxBatches = 400): int
             break;
         }
         $batch = q('SELECT id, path FROM screenshots ORDER BY id ASC LIMIT 500');
+        try {
+            $rec = q1("SELECT id, frames, UNIX_TIMESTAMP(created_at) AS t FROM recordings
+                       WHERE status = 'done' ORDER BY id ASC LIMIT 1");
+            if ($rec && $batch) {         // which is older: that recording, or the oldest screenshot?
+                $first = q1('SELECT UNIX_TIMESTAMP(recv_at) AS t FROM screenshots WHERE id = ?', [$batch[0]['id']]);
+                if ($first && (int) $first['t'] < (int) $rec['t']) {
+                    $rec = null;
+                }
+            }
+        } catch (Throwable $e) {
+            $rec = null;                  // no recordings yet on this database
+        }
+        if ($rec) {
+            rec_delete((int) $rec['id']);
+            $freed += max(1, (int) $rec['frames']);
+            continue;
+        }
         if (!$batch) {
             break;
         }
@@ -712,4 +729,352 @@ function live_frame_remember(int $deviceId, string $dir, string $name): void
         }
     }
     sig_put($deviceId, 'livetmp', implode("\n", $names));
+}
+
+/** ---- Recordings ----
+ * A recording is a video of one computer's screen for a few minutes, started with the
+ * Record button. The computer's agent takes a picture each second in which the screen
+ * has changed and sends it marked as part of the recording. The pictures are kept as
+ * files in the recording's own folder, each named
+ *     <how far into the recording it was taken, in ms>_<width>x<height>.jpg
+ * and the recording itself is one row in `recordings`. Playing it shows those pictures
+ * at the pace they were taken; downloading it puts them end to end in one video file.
+ *
+ * While a computer records, its signal file 'rec' holds
+ *     "<until, unix s> <recording id> <started, unix ms> <minutes> <id of the action>"
+ * so storing a picture needs no database. (The first number alone is what the older
+ * readers of that file want to know: "frames are flowing until then".) */
+const REC_MAX_MINUTES = 60;
+const REC_GRACE       = 20;    // seconds after its end in which a late picture is still taken
+const REC_WAIT        = 90;    // seconds a computer has to take the action; after that it is off
+
+function rec_dir(int $recId): string
+{
+    return em_config()['data_dir'] . '/recs/' . $recId;
+}
+
+/** The recording a computer is making right now (from its signal file), or null. */
+function rec_active(int $deviceId): ?array
+{
+    $p = explode(' ', sig_get($deviceId, 'rec'));
+    if (count($p) < 5 || (int) $p[1] <= 0) {
+        return null;
+    }
+    return ['until' => (int) $p[0], 'id' => (int) $p[1], 'start' => (float) $p[2], 'minutes' => (int) $p[3],
+            'cmd' => (int) $p[4]];
+}
+
+/** Does this computer's agent mark the pictures of a recording itself? From 1.4.0 it
+ * does. An older one just sends screenshots more often while it "records", so the
+ * server takes those as the recording's pictures. */
+function rec_agent_marks(string $version): bool
+{
+    return version_compare(preg_replace('/[^0-9.]/', '', $version) ?: '0', '1.4.0', '>=');
+}
+
+/** Put one picture into a recording, under the moment it was taken ($ms into it). */
+function rec_store(int $recId, int $ms, int $w, int $h, string $from, bool $uploaded): bool
+{
+    $dir = rec_dir($recId);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    $dst = sprintf('%s/%09d_%dx%d.jpg', $dir, max(0, $ms), $w, $h);
+    if (is_file($dst)) {
+        return true;                 // that moment is already there
+    }
+    return $uploaded ? @move_uploaded_file($from, $dst) : @copy($from, $dst);
+}
+
+/** A recording's pictures, oldest first: [ms into the recording, width, height, file name]. */
+function rec_frames(int $recId): array
+{
+    $out = [];
+    foreach ((array) @scandir(rec_dir($recId)) as $f) {
+        if (preg_match('/^(\d{9})_(\d{1,5})x(\d{1,5})\.jpg$/', (string) $f, $m)) {
+            $out[] = [(int) $m[1], (int) $m[2], (int) $m[3], $f];
+        }
+    }
+    return $out;
+}
+
+/** Nothing was recorded: say why, and leave no empty folder. */
+function rec_fail(int $recId, string $why): void
+{
+    x("UPDATE recordings SET status = 'failed', note = ?, ended_at = NOW()
+       WHERE id = ? AND status IN ('waiting','recording')", [mb_substr($why, 0, 190), $recId]);
+    @rmdir(rec_dir($recId));
+}
+
+/** A recording is over: measure what arrived and mark it finished. Safe to call twice. */
+function rec_finish(int $recId, bool $stopped = false): void
+{
+    $row = q1("SELECT device_id, minutes FROM recordings WHERE id = ? AND status IN ('waiting','recording')", [$recId]);
+    if (!$row) {
+        return;
+    }
+    $now = rec_active((int) $row['device_id']);
+    if ($now && $now['id'] === $recId) {
+        sig_put((int) $row['device_id'], 'rec', '0');      // pictures that come after this are not taken
+    }
+    $dir    = rec_dir($recId);
+    $frames = rec_frames($recId);
+    $n      = count($frames);
+    if ($n === 0) {
+        rec_fail($recId, $stopped ? 'Stopped before the first picture arrived.'
+            : 'No picture arrived from the computer: it was switched off, asleep or locked.');
+        return;
+    }
+    $bytes = 0;
+    foreach ($frames as $f) {
+        $bytes += (int) @filesize($dir . '/' . $f[3]);
+    }
+    $seconds = max(1, (int) ceil($frames[$n - 1][0] / 1000));
+    $note    = $stopped ? 'Stopped early.'
+        : ($seconds < (int) $row['minutes'] * 60 - 15
+            ? 'Ended early: the computer stopped sending pictures (switched off, asleep or locked).' : '');
+    x("UPDATE recordings SET status = 'done', note = ?, ended_at = NOW(), seconds = ?, frames = ?, bytes = ?
+       WHERE id = ? AND status IN ('waiting','recording')", [$note, $seconds, $n, $bytes, $recId]);
+}
+
+/** Bring one computer's recordings up to date: one the computer never took has failed,
+ * one whose time is up is finished. Costs one small query when there is nothing to do. */
+function rec_settle(int $deviceId): void
+{
+    $open = q("SELECT r.id, r.status, r.command_id, c.status AS cstatus, c.result AS cresult,
+                      (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(r.created_at)) AS age,
+                      (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(r.ends_at)) AS past
+               FROM recordings r LEFT JOIN commands c ON c.id = r.command_id
+               WHERE r.device_id = ? AND r.status IN ('waiting','recording')", [$deviceId]);
+    foreach ($open as $r) {
+        $rid = (int) $r['id'];
+        if ($r['status'] === 'recording') {
+            if ((int) $r['past'] > REC_GRACE) {
+                rec_finish($rid);
+            }
+        } elseif ($r['cstatus'] === 'failed') {
+            $why = (string) $r['cresult'];
+            rec_fail($rid, ($why === '' || preg_match('/^(expired|cancelled)/', $why))
+                ? 'The computer was off, so nothing was recorded.' : 'The computer could not record: ' . $why);
+        } elseif ((int) $r['age'] > REC_WAIT) {
+            x("UPDATE commands SET status = 'failed', result = 'cancelled: the computer did not take it in time', done_at = NOW()
+               WHERE id = ? AND status = 'pending'", [(int) $r['command_id']]);
+            rec_fail($rid, 'The computer did not answer (it is off or asleep), so nothing was recorded.');
+        }
+    }
+}
+
+/** The owner pressed Stop: end what this computer is recording, now. Returns how many. */
+function rec_stop(int $deviceId): int
+{
+    $n = 0;
+    foreach (q("SELECT id, status, command_id FROM recordings
+                WHERE device_id = ? AND status IN ('waiting','recording')", [$deviceId]) as $r) {
+        if ($r['status'] === 'waiting') {
+            x("UPDATE commands SET status = 'failed', result = 'cancelled: stopped before the computer took it', done_at = NOW()
+               WHERE id = ? AND status = 'pending'", [(int) $r['command_id']]);
+            rec_fail((int) $r['id'], 'Stopped before the computer started it.');
+        } else {
+            rec_finish((int) $r['id'], true);
+        }
+        $n++;
+    }
+    sig_put($deviceId, 'rec', '0');
+    return $n;
+}
+
+/** The computer has just been handed a "record" action: its recording starts now. */
+function rec_handover(int $deviceId, int $cmdId, int $minutes): void
+{
+    if ($minutes <= 0) {
+        return;                      // a stop took effect the moment the owner pressed it
+    }
+    try {
+        $r = q1('SELECT id, status FROM recordings WHERE command_id = ? AND device_id = ?', [$cmdId, $deviceId]);
+    } catch (Throwable $e) {
+        $r = null;                   // this database has not been migrated yet
+    }
+    if (!$r) {
+        // An action from before recordings were kept as such: frames flow, nothing more.
+        sig_put($deviceId, 'rec', (string) (time() + $minutes * 60 + 5));
+        return;
+    }
+    // Offered a second time (its first reply was lost on the way): the clock starts
+    // again, unless pictures have already come in.
+    if ($r['status'] === 'waiting' || ($r['status'] === 'recording' && !rec_frames((int) $r['id']))) {
+        x("UPDATE recordings SET status = 'recording', started_at = NOW(), ends_at = NOW() + INTERVAL ? MINUTE
+           WHERE id = ?", [$minutes, (int) $r['id']]);
+        sig_put($deviceId, 'rec', sprintf('%d %d %d %d %d', time() + $minutes * 60, (int) $r['id'],
+            (int) round(microtime(true) * 1000), $minutes, $cmdId));
+    }
+}
+
+/** Delete a recording: its pictures, its folder and its row. */
+function rec_delete(int $recId): void
+{
+    $dir = rec_dir($recId);
+    foreach ((array) @scandir($dir) as $f) {
+        if ($f !== false && $f !== '.' && $f !== '..') {
+            @unlink($dir . '/' . $f);
+        }
+    }
+    @rmdir($dir);
+    x('DELETE FROM recordings WHERE id = ?', [$recId]);
+}
+
+/** Recordings as the dashboard shows them. $where is one of our own conditions. */
+function rec_rows(string $where, array $args): array
+{
+    $rows = q("SELECT r.id, r.device_id, r.status, r.minutes, r.note, r.seconds, r.frames, r.bytes,
+                      r.started_at, r.created_at, UNIX_TIMESTAMP(r.created_at) AS stamp,
+                      (UNIX_TIMESTAMP(r.ends_at) - UNIX_TIMESTAMP()) AS secs_left,
+                      (UNIX_TIMESTAMP() - UNIX_TIMESTAMP(r.created_at)) AS age,
+                      COALESCE(NULLIF(a.name, ''), a.username, '') AS made_by
+               FROM recordings r LEFT JOIN admins a ON a.id = r.created_by
+               WHERE $where ORDER BY r.id DESC LIMIT 60", $args);
+    foreach ($rows as &$r) {
+        if ($r['status'] === 'recording') {          // still filling: count what has arrived
+            $r['frames'] = count(rec_frames((int) $r['id']));
+        }
+    }
+    unset($r);
+    return $rows;
+}
+
+/** One computer's recordings, newest first. */
+function recordings_data(int $deviceId): array
+{
+    try {
+        rec_settle($deviceId);
+        return rec_rows('r.device_id = ?', [$deviceId]);
+    } catch (PDOException $e) {
+        return [];                   // the table comes with the next "tool.php migrate"
+    }
+}
+
+/** One recording by its id, or null. */
+function rec_row(int $recId): ?array
+{
+    try {
+        $dev = q1('SELECT device_id FROM recordings WHERE id = ?', [$recId]);
+        if (!$dev) {
+            return null;
+        }
+        rec_settle((int) $dev['device_id']);
+        return rec_rows('r.id = ?', [$recId])[0] ?? null;
+    } catch (PDOException $e) {
+        return null;
+    }
+}
+
+/** How a recording becomes one video file: Motion-JPEG in an AVI. That is no more than
+ * the recording's own pictures put end to end, with a header and a table of contents,
+ * so the server needs no video software and Windows plays the file as it is.
+ * The video runs at one picture a second, in step with the clock. A second in which
+ * the screen did not change has no picture of its own (an empty entry), and a player
+ * keeps showing the one before. Windows' own player, though, shows the NEXT picture
+ * when someone jumps into such a stretch. So the last second of every still stretch
+ * gets the earlier picture once more: whichever way a player looks, backwards or
+ * forwards, it finds what was on the screen.
+ * Returns the plan - size, number of seconds, which picture stands for which second
+ * and the exact length of the file - or null when there is nothing to show. */
+function rec_video_plan(int $recId): ?array
+{
+    $frames = rec_frames($recId);
+    if (!$frames) {
+        return null;
+    }
+    // A video has one size. An agent from 1.4.0 keeps one size through a recording; an
+    // older one may not, so take the size most of the pictures have and leave out the rest.
+    $sizes = [];
+    foreach ($frames as $f) {
+        $k = $f[1] . 'x' . $f[2];
+        $sizes[$k] = ($sizes[$k] ?? 0) + 1;
+    }
+    arsort($sizes);
+    [$w, $h] = array_map('intval', explode('x', (string) array_key_first($sizes)));
+    $dir = rec_dir($recId);
+    $use = [];
+    foreach ($frames as $f) {
+        $bytes = ($f[1] === $w && $f[2] === $h) ? (int) @filesize($dir . '/' . $f[3]) : 0;
+        if ($bytes > 0) {
+            $use[] = [$f[0], $f[3], $bytes];
+        }
+    }
+    if (!$use) {
+        return null;
+    }
+    $first = $use[0][0];
+    $n     = max(1, (int) ceil(($use[count($use) - 1][0] - $first) / 1000));
+    $slots = [];
+    foreach ($use as $u) {           // the last picture taken in a second stands for it
+        $slots[min($n - 1, intdiv($u[0] - $first, 1000))] = [$u[1], $u[2]];
+    }
+    for ($i = 1; $i < $n - 1; $i++) {            // the last second of a still stretch (see above)
+        if (!isset($slots[$i]) && isset($slots[$i + 1])) {
+            for ($k = $i - 1; !isset($slots[$k]); $k--) {
+            }
+            $slots[$i] = $slots[$k];
+        }
+    }
+    $movi = 4;                       // the word 'movi' itself
+    $max  = 0;
+    for ($i = 0; $i < $n; $i++) {
+        $bytes = $slots[$i][1] ?? 0;
+        $movi += 8 + $bytes + ($bytes & 1);
+        $max   = max($max, $bytes);
+    }
+    return ['dir' => $dir, 'w' => $w, 'h' => $h, 'n' => $n, 'slots' => $slots, 'movi' => $movi, 'max' => $max,
+            'size' => 12 + 200 + 8 + $movi + 8 + 16 * $n];
+}
+
+/** Send the video file planned above as a download. Ends the request. */
+function rec_video_send(array $p, string $fileName): void
+{
+    [$w, $h, $n, $max] = [$p['w'], $p['h'], $p['n'], $p['max']];
+    $head  = 'RIFF' . pack('V', $p['size'] - 8) . 'AVI ';
+    $head .= 'LIST' . pack('V', 192) . 'hdrl';
+    // microseconds a picture, bytes a second, padding, "has an index", pictures, 0, streams, buffer, width, height, 4 spare
+    $head .= 'avih' . pack('V', 56) . pack('V14', 1000000, $max, 0, 0x10, $n, 0, 1, $max, $w, $h, 0, 0, 0, 0);
+    $head .= 'LIST' . pack('V', 116) . 'strl';
+    // flags, priority, language, initial frames, scale, rate (rate / scale = 1 a second), start, length, buffer, quality, sample size
+    $head .= 'strh' . pack('V', 56) . 'vidsMJPG' . pack('VvvVVVVVVVV', 0, 0, 0, 0, 1, 1, 0, $n, $max, 0xFFFFFFFF, 0)
+           . pack('v4', 0, 0, $w, $h);
+    $head .= 'strf' . pack('V', 40) . pack('VVVvv', 40, $w, $h, 1, 24) . 'MJPG' . pack('V5', $w * $h * 3, 0, 0, 0, 0);
+    $head .= 'LIST' . pack('V', $p['movi']) . 'movi';
+
+    db_close();                                  // only files from here on
+    @set_time_limit(0);
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: video/x-msvideo');
+    header('Content-Length: ' . $p['size']);
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    echo $head;
+    $index = '';
+    $at    = 4;                                  // where each entry starts, counted from the word 'movi'
+    for ($i = 0; $i < $n; $i++) {
+        $slot  = $p['slots'][$i] ?? null;
+        $bytes = $slot ? $slot[1] : 0;
+        echo '00dc', pack('V', $bytes);
+        if ($slot) {
+            // The length was promised in the header: keep to it even if the file has gone since.
+            $data = (string) @file_get_contents($p['dir'] . '/' . $slot[0]);
+            echo strlen($data) === $bytes ? $data : str_pad(substr($data, 0, $bytes), $bytes, "\0");
+            if ($bytes & 1) {
+                echo "\0";
+            }
+        }
+        $index .= '00dc' . pack('VVV', $slot ? 0x10 : 0, $at, $bytes);
+        $at    += 8 + $bytes + ($bytes & 1);
+        if (($i & 7) === 7) {
+            flush();
+        }
+    }
+    echo 'idx1', pack('V', 16 * $n), $index;
+    flush();
+    exit;
 }
