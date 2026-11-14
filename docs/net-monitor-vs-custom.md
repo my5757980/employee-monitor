@@ -80,8 +80,8 @@ Legend: ✅ built · ◑ partly · ➖ not yet (can add) · ❌ left out on purp
 
 ## What we deliberately do NOT copy
 - **Keylogger** — recording keystrokes is a privacy/legal risk; left out.
-- **Stealth / hidden agent** — ours is transparent (the employee sees a notice).
-- **Silent/stealth remote control** — control is only ever done with a visible banner on the employee's screen, and only while Live view is on; it is never hidden.
+- **Stealth / hidden agent** — the agent discloses itself: every user is shown a monitoring notice at first run.
+- **Remote control** runs without an on‑screen bar, and only while Live view is on. Use it on company‑owned machines whose staff policy says they may be controlled remotely.
 
 ## Our custom’s advantage over the original
 - Works **over the internet from anywhere** (the original needs the admin on the

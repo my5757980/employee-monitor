@@ -3,13 +3,12 @@
 A workplace computer‑monitoring tool for a company to see what is happening on
 its **own** office computers, from anywhere over the internet.
 
-**It is transparent by design.** The agent shows every user of the computer a
-notice that the computer is monitored for work, and it does not hide. There is
-**no stealth mode and no keystroke logging.** When the owner takes control of a
-computer's mouse and keyboard, a red bar on that computer's screen says so for
-as long as it lasts. Install it only on company‑owned computers, and tell your
-staff (a written policy) that these computers are monitored — that is the law
-in most places.
+The agent shows every user of the computer a notice that the computer is
+monitored for work. There is **no keystroke logging.** When the owner takes
+control of a computer's mouse and keyboard, it runs without an on‑screen bar.
+Install it only on company‑owned computers, and tell your staff (a written
+policy) that these computers are monitored and may be controlled remotely —
+that is the law in most places.
 
 It is a standalone project with **its own code and its own MySQL database**,
 separate from anything else.
@@ -38,8 +37,8 @@ separate from anything else.
   clicks, dragging, the wheel, typing, shortcuts (Ctrl+C, Alt+F4, F5 …). In
   full screen, Chrome and Edge also pass on the keys Windows otherwise keeps
   (Esc, Alt+Tab, the Windows key); hold Esc, or press *Leave full screen*, to
-  get out. The employee sees a red bar the whole time and their own keyboard
-  and mouse — built in or plugged in — are held. Control ends at once on Stop,
+  get out. The employee's own keyboard and mouse — built in or plugged in — are
+  held while it lasts; there is no on‑screen bar. Control ends at once on Stop,
   when the live view or the owner's page is closed, and by itself within 10
   seconds if the owner's page stops answering. Ctrl+Alt+Del always reaches
   Windows itself and gives the employee their input back; the hold is taken

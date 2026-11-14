@@ -20,8 +20,8 @@
   #liveFs .fsclose { position:fixed; top:12px; right:18px; color:#fff; font-size:34px; line-height:1; cursor:pointer; opacity:.85; z-index:71; }
   /* While controlling, nothing of ours may lie on the computer's picture: a button there
      would swallow the click meant for whatever is under it (a window's X, the clock).
-     The one way out of full screen sits at the top centre, where the computer itself
-     shows its "being controlled" bar, so it covers nothing that can be clicked. */
+     The one way out of full screen sits at the top centre, a thin strip, so it
+     covers almost nothing that can be clicked. */
   #liveFs .fsexit { display:none; position:fixed; top:6px; left:50%; transform:translateX(-50%); z-index:71; cursor:pointer;
                     background:rgba(15,23,42,.82); color:#fff; font-size:12px; font-weight:600; padding:4px 12px; border-radius:9999px; }
   #liveFs.ctl .fsclose { display:none; }
@@ -1784,7 +1784,7 @@ function ctlUI() {
   $('#remoteStop').classList.toggle('hidden', !mine);
   $('#ctlBar').classList.toggle('hidden', !mine);
   $('#ctlBar').classList.toggle('wait', ctl.state === 'asking');
-  setText($('#ctlText'), ctl.state === 'on' ? '🖱 Controlling — the employee sees a notice on their screen' : 'Starting control… waiting for the computer');
+  setText($('#ctlText'), ctl.state === 'on' ? '🖱 Controlling this computer' : 'Starting control… waiting for the computer');
   // Nothing of ours lies on the picture while controlling (see the note in the styles).
   $('#dLive').classList.toggle('hidden', mine);
   $('#dFs').classList.toggle('hidden', mine);

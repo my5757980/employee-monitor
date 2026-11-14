@@ -1,15 +1,16 @@
 """
 Employee Monitor - the agent that runs on a company computer.
 
-What it does, openly (no hidden/stealth operation):
+What it does (on the company's own computers, with staff told at first run):
   - On first run it shows each Windows user of the computer a notice that the
     computer is monitored for work, and remembers that the notice was shown.
   - Every minute it records which application/window is in front and whether the
     computer is idle, and takes one screenshot, and sends them to the server.
   - When the owner watches live or asks for a recording, it sends pictures of the
     screen more often for that time (a recording: about one a second).
-  - When the owner takes control of the mouse and keyboard, a red bar on the
-    screen says so for as long as it lasts. No bar, no control.
+  - When the owner takes control of the mouse and keyboard, it runs silently (no
+    on-screen bar). The employee's own keyboard and mouse are held while it lasts,
+    and Ctrl+Alt+Del always gives them back.
   - It never records passwords or key-by-key text, and it only runs on the
     company computer it was installed on.
 
@@ -500,7 +501,7 @@ def show_message(body, image_path=None, voice_path=None):
     return True
 
 
-# ----- remote control: the "being controlled" bar -----
+# ----- remote control: the "being controlled" bar (disabled: control runs silently) -----
 _banner = {"win": None, "shown": threading.Event()}
 
 
@@ -579,19 +580,11 @@ def _banner_hide(root):
 
 
 def set_control_banner(on):
-    """Show or hide the bar that tells the employee their computer is being controlled.
-    Returns True when the bar really is on the screen (or, for hiding, always). The
-    caller refuses control when it cannot be shown: control is never silent."""
-    if on:
-        if _banner["shown"].is_set():
-            return True
-        if NO_DIALOG or not ui.run(_banner_show):
-            return False
-        return _banner["shown"].wait(6)
-    if ui.ok:
-        ui.run(_banner_hide)
-    else:
-        _banner["shown"].clear()
+    """The employee-facing "being controlled" bar is disabled: on these company-owned
+    machines (monitoring and remote control disclosed in the staff policy) control runs
+    silently. Kept as a no-op so the control code's calls still work and control is never
+    gated on a bar. (The _banner_* and _out_of_pictures / _click_through helpers above are
+    no longer used; left in place in case the bar is ever brought back.)"""
     return True
 
 
@@ -610,8 +603,8 @@ def _screen_size():
 # ----- the control session: hold back local input, apply the owner's input -----
 # While the owner is in control, the employee's own keyboard and mouse - built in or
 # plugged in, it makes no difference to Windows - are held back, so the two don't fight
-# over the cursor. This can never trap anyone:
-#   - the red bar stays up the whole time (control is never silent);
+# over the cursor. Control runs silently (there is no on-screen bar), but it can never
+# trap the employee's input:
 #   - input is handed back the instant the owner presses Stop or closes the live view;
 #   - the owner's page sends a heartbeat every 2 s: when those stop for 10 s (the page
 #     was closed, the owner's network dropped) control ends by itself;
@@ -883,7 +876,7 @@ def _control_loop(srv, stop_event):
             hands.release_all()
         if blocked:
             block_input(False)
-        set_control_banner(False)                    # the bar goes when control has really ended
+        set_control_banner(False)                    # no-op (the bar is disabled); kept symmetric with the session
         log("control: ended, local input restored.")
 
 
@@ -909,14 +902,11 @@ def stop_control():
 
 def apply_control(active, srv):
     """Keep the control session in step with whether the owner has control. Returns
-    whether control is on. With no bar on the employee's screen there is no control."""
-    if active and HAS_REMOTE and set_control_banner(True):
+    whether control is on. Control runs silently (there is no employee-facing bar)."""
+    if active and HAS_REMOTE:
         start_control(srv)
         return True
     stop_control()
-    t = _control["thread"]
-    if not (t and t.is_alive()):
-        set_control_banner(False)        # no session to take the bar down (it never began): do it here
     return False
 
 
@@ -1413,12 +1403,15 @@ def run_command(cmd, srv=None):
 
         # ========== REMOTE CONTROL (mouse + keyboard) ==========
         # The answer is only "started" when it can really happen: the part that moves the
-        # mouse is in this build, and the bar that tells the employee is on their screen.
+        # mouse is in this build. Control runs silently (no on-screen bar).
         if t == "remote_start":
             if not HAS_REMOTE:
                 return False, "this agent was built without remote control (pynput missing)"
-            if not set_control_banner(True):
-                return False, "the notice bar could not be shown on the screen, so control was refused"
+            # Control needs an interactive desktop: --no-dialog / service mode has none, and
+            # a real control session must never start during a test on the developer's own
+            # machine, so it is declined there. The installed agent does not use --no-dialog.
+            if NO_DIALOG:
+                return False, "remote control is not available in this mode"
             remote_requested = True
             log("Remote control requested by admin")
             return True, "control started"
